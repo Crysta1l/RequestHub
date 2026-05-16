@@ -4,6 +4,7 @@ using Microsoft.IdentityModel.Tokens;
 using RequestHub.Data;
 using RequestHub.Interfaces;
 using RequestHub.Repositories;
+using Scalar.AspNetCore;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -19,7 +20,8 @@ builder.Services.AddScoped<IUserRepository, UserRepository>();
 
 builder.Services.AddOpenApi();
 
-
+// Mapper
+builder.Services.AddAutoMapper(cfg => { }, typeof(Program));
 
 // JWT 
 
@@ -42,13 +44,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             IssuerSigningKey = new SymmetricSecurityKey(key)
         };
     });
-
+ 
 
 
 var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.MapScalarApiReference();
 }
 
 
