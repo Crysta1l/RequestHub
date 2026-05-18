@@ -12,7 +12,7 @@ using RequestHub.Data;
 namespace RequestHub.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260514055523_InitialCreate")]
+    [Migration("20260518051731_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -51,11 +51,11 @@ namespace RequestHub.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("Priority")
+                    b.Property<string>("Resource")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("Resource")
+                    b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 

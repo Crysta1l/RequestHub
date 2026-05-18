@@ -22,7 +22,7 @@ namespace RequestHub.Migrations
                     Resource = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     AccessType = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     Justification = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Priority = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Status = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     CreatedBy = table.Column<int>(type: "int", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
                 },
