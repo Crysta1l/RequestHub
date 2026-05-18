@@ -11,5 +11,7 @@
         public string Status { get; set; } = string.Empty; // Draft, Submitted, InApproval, Approved, Rejected, Completed
         public int CreatedBy { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        public string? Basis { get; set; } // asked to add
     }
 }

@@ -18,6 +18,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 // Scoped - one instance per HTTP request 
 builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IAccessRequestRepository, AccessRequestRepository>();
 
 builder.Services.AddOpenApi();
 
