@@ -38,7 +38,7 @@ namespace RequestHub.Repositories
             await _context.SaveChangesAsync();
         }
 
-        public async Task<bool> existAsync(int id)
+        public async Task<bool> ExistsAsync(int id)
         {
             return await _context.AccessRequests.AnyAsync(r => r.Id == id);
         }

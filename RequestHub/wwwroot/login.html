@@ -2,22 +2,26 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Request Hub Login</title>
+    <title>RequestHub · Login</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div>
-        <h1>Request Hub</h1>
-        <div>
-            <label for="email">Email</label>
-            <input type="email" placeholder="@gmail.com">
+    <div class="container">
+        <h1>RequestHub</h1>
+        <div class="card">
+            <input type="email" id="email" placeholder="Email" value="">
+            <input type="password" id="password" placeholder="Password" value="">
+            <button id="loginBtn">Login</button>
+            <div id="message"></div>
+            <hr>
+            <button id="showRegBtn" class="secondary">Create account</button>
+            <div id="regForm" style="display:none; margin-top: 1rem;">
+                <input type="email" id="regEmail" placeholder="Email">
+                <input type="password" id="regPassword" placeholder="Password">
+                <button id="doRegBtn">Register</button>
+            </div>
         </div>
-        <div>
-            <label for="password">Password</label>
-            <input type="password" placeholder="password">
-        </div>
-        <button id="loginBth">Login</button>
-        <div id="message"></div>
     </div>
+    <script src="app.js"></script>
 </body>
 </html>

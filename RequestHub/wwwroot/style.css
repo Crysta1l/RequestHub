@@ -1,0 +1,123 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: #0b0b14;
+    background-image: radial-gradient(circle at 10% 20%, #1a0a1f, #0a0a0f);
+    font-family: 'Segoe UI', 'Courier New', monospace;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 1rem;
+    color: #e0cfe5;
+}
+
+div.container, body > div {
+    max-width: 800px;
+    width: 100%;
+    background: rgba(20, 5, 25, 0.7);
+    backdrop-filter: blur(6px);
+    border-radius: 28px;
+    padding: 2rem;
+    box-shadow: 0 0 30px rgba(128, 0, 128, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(156, 39, 176, 0.3);
+}
+
+h1 {
+    font-size: 2.5rem;
+    text-align: center;
+    margin-bottom: 2rem;
+    letter-spacing: 2px;
+    background: linear-gradient(135deg, #d9b48b, #b84c7c);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 0 8px rgba(184, 76, 124, 0.4);
+}
+
+h2 {
+    font-size: 1.5rem;
+    margin: 1.5rem 0 1rem 0;
+    border-left: 4px solid #b84c7c;
+    padding-left: 1rem;
+    color: #e5c4e8;
+}
+
+input, select, textarea, button {
+    width: 100%;
+    padding: 0.8rem;
+    margin: 0.6rem 0;
+    border-radius: 16px;
+    border: 1px solid #5c2a6e;
+    background: #1e1024;
+    color: #f0e6f0;
+    font-size: 1rem;
+    transition: all 0.2s;
+}
+
+input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: #c53a8f;
+    box-shadow: 0 0 8px #b84c7c;
+}
+
+button {
+    background: linear-gradient(95deg, #3c1c44, #2d123a);
+    cursor: pointer;
+    font-weight: bold;
+    letter-spacing: 1px;
+    border: 1px solid #9b4d96;
+    color: #f2defa;
+}
+
+button:hover {
+    background: linear-gradient(95deg, #642873, #4a1f5e);
+    box-shadow: 0 0 12px #b84c7c;
+    transform: translateY(-2px);
+}
+
+#logoutBtn {
+    background: linear-gradient(95deg, #4e1a2a, #2d0f1c);
+    border-color: #b53b6e;
+}
+
+#logoutBtn:hover {
+    background: linear-gradient(95deg, #7a2b45, #511d31);
+}
+
+.request-card, .request-item {
+    background: #1b0f21;
+    border-left: 4px solid #b84c7c;
+    margin: 1rem 0;
+    padding: 1rem;
+    border-radius: 20px;
+    transition: 0.1s;
+}
+
+.request-card strong, .request-item strong {
+    color: #e8b0d0;
+}
+
+hr {
+    border: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #b84c7c, #9c4d9c, transparent);
+    margin: 1.5rem 0;
+}
+
+#message {
+    margin-top: 1rem;
+    padding: 0.5rem;
+    text-align: center;
+    color: #f5a3c7;
+}
+
+button:disabled {
+    opacity: 0.6;
+    filter: grayscale(0.2);
+    cursor: not-allowed;
+}

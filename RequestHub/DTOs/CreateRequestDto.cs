@@ -8,5 +8,7 @@
         public string AccessType { get; set; } = string.Empty;
         public string Justification { get; set; } = string.Empty;
         public string Priority { get; set; } = "Medium";
+        public string? Basis { get; set; }
+
     }
 }

@@ -11,7 +11,7 @@ using System.Text;
 namespace RequestHub.Controllers
 {
     [ApiController]
-    [Route("api/controller")]
+    [Route("api/[controller]")]
     public class AuthController : ControllerBase
     {
         private readonly IUserRepository _userRepository;

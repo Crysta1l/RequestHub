@@ -4,6 +4,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using RequestHub.Data;
 using RequestHub.Interfaces;
+using RequestHub.Models;
 using RequestHub.Repositories;
 using Scalar.AspNetCore;
 using System.Text;
@@ -50,6 +51,29 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 
 var app = builder.Build();
+
+
+// Admin
+
+using (var scope = app.Services.CreateScope())
+{
+    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    if (!context.Users.Any(u => u.Email == "Admin"))
+    {
+        context.Users.Add(new User
+        {
+            Email = "admin",
+            HashPassword = BCrypt.Net.BCrypt.HashPassword("admin"),
+            Role = "Admin"
+        });
+        context.SaveChanges();
+    }
+}
+
+    // Html
+
+    app.UseStaticFiles();
+app.UseDefaultFiles(); // optional to serve index.html as default
 
 
 
