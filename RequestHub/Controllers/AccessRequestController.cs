@@ -6,37 +6,46 @@ using RequestHub.Data;
 using RequestHub.DTOs;
 using RequestHub.Interfaces;
 using RequestHub.Models;
-using RequestHub.Repositories;
 using System.Security.Claims;
 
 namespace RequestHub.Controllers
 {
-    // Did some refactoring 
     [ApiController]
     [Route("api/[controller]")]
     [Authorize]
     public class AccessRequestController : ControllerBase
     {
         private readonly IAccessRequestRepository _requestRepo;
-        private readonly IMapper _mapper;
+        private readonly IUserRepository _userRepo;
         private readonly AppDbContext _context;
+        private readonly IMapper _mapper;
 
-        public AccessRequestController(IAccessRequestRepository requestRepo, IMapper mapper, AppDbContext context) 
+        public AccessRequestController(IAccessRequestRepository requestRepo, IUserRepository userRepo, AppDbContext context, IMapper mapper)
         {
             _requestRepo = requestRepo;
-            _mapper = mapper;
+            _userRepo = userRepo;
             _context = context;
+            _mapper = mapper;
         }
 
-        private int GetCurrentUserID() => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        private int GetCurrentUserId() => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         private string GetCurrentUserRole() => User.FindFirstValue(ClaimTypes.Role)!;
 
         [HttpGet]
         public async Task<IActionResult> GetMyRequests()
         {
-            var userId = GetCurrentUserID();
-            var request = await _requestRepo.GetByUserIdAsync(userId);
+            var userId = GetCurrentUserId();
+            var requests = await _requestRepo.GetByUserIdAsync(userId);
+            return Ok(requests);
+        }
 
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetRequest(int id)
+        {
+            var userId = GetCurrentUserId();
+            var request = await _requestRepo.GetByIdAsync(id);
+            if (request == null) return NotFound();
+            if (request.CreatedBy != userId && GetCurrentUserRole() != "Admin") return Forbid();
             return Ok(request);
         }
 
@@ -44,21 +53,17 @@ namespace RequestHub.Controllers
         public async Task<IActionResult> Create(CreateRequestDto dto)
         {
             var request = _mapper.Map<AccessRequest>(dto);
-
-            request.CreatedBy = GetCurrentUserID();
+            request.CreatedBy = GetCurrentUserId();
             request.Status = "Draft";
             request.CreatedAt = DateTime.UtcNow;
-
             await _requestRepo.AddAsync(request);
-
             return Ok(request);
-
         }
 
         [HttpPatch("{id}/submit")]
         public async Task<IActionResult> Submit(int id)
         {
-            var userId = GetCurrentUserID();
+            var userId = GetCurrentUserId();
             var request = await _requestRepo.GetByIdAsync(id);
             if (request == null) return NotFound();
             if (request.CreatedBy != userId) return Forbid();
@@ -67,8 +72,9 @@ namespace RequestHub.Controllers
             request.Status = "Submitted";
             await _requestRepo.UpdateAsync(request);
 
-            // Create approval steps (example: hardcoded approver IDs – replace with real logic later)
-            var approverIds = new[] { 2, 3 }; // IDs of users with role "Approver"
+            // Create approval steps – hardcoded approver IDs (replace with real logic)
+            // Here we assign approvers: user IDs 2 and 3 (must exist in Users table)
+            var approverIds = new[] { 2, 3 };
             for (int i = 0; i < approverIds.Length; i++)
             {
                 var step = new ApprovalStep
@@ -81,71 +87,76 @@ namespace RequestHub.Controllers
                 _context.ApprovalSteps.Add(step);
             }
             await _context.SaveChangesAsync();
-
             return Ok(request);
         }
 
-        [HttpPatch("{id}/approve")]
-        public async Task<IActionResult> Approve(int id)
+        [HttpPost("{id}/approve")]
+        public async Task<IActionResult> Approve(int id, [FromBody] string? comment)
         {
+            var userId = GetCurrentUserId();
             var role = GetCurrentUserRole();
-
-            if (role != "Approver" && role != "Admin")
-                return Forbid("Only approved can approve");
+            if (role != "Approver" && role != "Admin") return Forbid("Only approvers can approve");
 
             var request = await _requestRepo.GetByIdAsync(id);
+            if (request == null) return NotFound();
+            if (request.Status != "Submitted") return BadRequest("Request not in submitted state");
 
-            if (request == null)
-                return NotFound();
+            // Find current pending step for this user
+            var step = await _context.ApprovalSteps
+                .FirstOrDefaultAsync(s => s.RequestId == id && s.ApproverId == userId && s.Status == "Pending");
+            if (step == null) return BadRequest("No pending approval step for you");
 
-            if (request.Status != "Sumbitted")
-                return BadRequest("Only submitted requests can be approved");
+            step.Status = "Approved";
+            step.Comment = comment;
+            step.ApprovedAt = DateTime.UtcNow;
+            _context.ApprovalSteps.Update(step);
+            await _context.SaveChangesAsync();
 
-            request.Status = "Approved";
-
-            await _requestRepo.UpdateAsync(request);
-
+            // Check if all steps are approved
+            var allSteps = await _context.ApprovalSteps.Where(s => s.RequestId == id).ToListAsync();
+            if (allSteps.All(s => s.Status == "Approved"))
+            {
+                request.Status = "Approved";
+                await _requestRepo.UpdateAsync(request);
+            }
             return Ok(request);
         }
 
-        [HttpPatch("{id}/reject")]
+        [HttpPost("{id}/reject")]
         public async Task<IActionResult> Reject(int id, [FromBody] string? comment)
         {
+            var userId = GetCurrentUserId();
             var role = GetCurrentUserRole();
-
-            if (role != "Approver" && role != "Admin")
-                return Forbid("Only apprivers can reject");
+            if (role != "Approver" && role != "Admin") return Forbid("Only approvers can reject");
 
             var request = await _requestRepo.GetByIdAsync(id);
+            if (request == null) return NotFound();
+            if (request.Status != "Submitted") return BadRequest("Request not in submitted state");
 
-            if (request == null)
-                return NotFound();
+            var step = await _context.ApprovalSteps
+                .FirstOrDefaultAsync(s => s.RequestId == id && s.ApproverId == userId && s.Status == "Pending");
+            if (step == null) return BadRequest("No pending approval step for you");
 
-            if (request.Status != "Sumbitted")
-                return BadRequest("Only sumbitted requests can be rejected");
-
+            step.Status = "Rejected";
+            step.Comment = comment;
+            step.ApprovedAt = DateTime.UtcNow;
+            _context.ApprovalSteps.Update(step);
             request.Status = "Rejected";
-
             await _requestRepo.UpdateAsync(request);
-
+            await _context.SaveChangesAsync();
             return Ok(request);
-
         }
 
         [HttpGet("pending")]
-        public async Task<IActionResult> GetPendingForApprover()
+        public async Task<IActionResult> GetPendingForCurrentUser()
         {
-            var role = GetCurrentUserRole();
-
-
-            if (role != "Approver" && role != "Admin")
-                return Forbid();
-
-            var pending = await _context.AccessRequests
-                .Where(r => r.Status == "Sumbitted")
+            var userId = GetCurrentUserId();
+            var steps = await _context.ApprovalSteps
+                .Include(s => s.Request)
+                .Where(s => s.ApproverId == userId && s.Status == "Pending")
+                .Select(s => s.Request)
                 .ToListAsync();
-
-            return Ok(pending);
+            return Ok(steps);
         }
     }
 }
