@@ -67,40 +67,106 @@ namespace RequestHub.Controllers
             if (request.CreatedBy != userId) return Forbid();
             if (request.Status != "Draft") return BadRequest("Only draft requests can be submitted");
 
+            // Create 2 approval steps: step 1 for Approver, step 2 for Admin
+            _context.ApprovalSteps.AddRange(
+                new ApprovalStep { RequestId = id, Order = 1, Status = "Pending" },
+                new ApprovalStep { RequestId = id, Order = 2, Status = "Pending" }
+            );
+
             request.Status = "Submitted";
             await _requestRepo.UpdateAsync(request);
+            await _context.SaveChangesAsync();
             return Ok(request);
         }
 
         [HttpPost("{id}/approve")]
-        public async Task<IActionResult> Approve(int id, [FromBody] string? comment)
+        public async Task<IActionResult> Approve(int id, [FromBody] CommentDto? dto)
         {
             var role = GetCurrentUserRole();
-            if (!role.Equals("Approver", StringComparison.OrdinalIgnoreCase) && !role.Equals("Admin", StringComparison.OrdinalIgnoreCase))
+            if (!role.Equals("Approver", StringComparison.OrdinalIgnoreCase) &&
+                !role.Equals("Admin", StringComparison.OrdinalIgnoreCase))
                 return StatusCode(403, "Only approvers or admin can approve.");
 
             var request = await _requestRepo.GetByIdAsync(id);
             if (request == null) return NotFound();
-            if (request.Status != "Submitted") return BadRequest($"Cannot approve: status is {request.Status}.");
 
-            request.Status = "Approved";
-            await _requestRepo.UpdateAsync(request);
+            var steps = await _context.ApprovalSteps
+                .Where(s => s.RequestId == id)
+                .OrderBy(s => s.Order)
+                .ToListAsync();
+
+            if (role.Equals("Approver", StringComparison.OrdinalIgnoreCase))
+            {
+                // Step 1: Approver must approve first
+                if (request.Status != "Submitted")
+                    return BadRequest("Request must be in Submitted status for Approver.");
+
+                var step = steps.FirstOrDefault(s => s.Order == 1);
+                if (step == null || step.Status != "Pending")
+                    return BadRequest("Approval step not available.");
+
+                step.Status = "Approved";
+                step.ApproverId = GetCurrentUserId();
+                step.ApprovedAt = DateTime.UtcNow;
+                step.Comment = dto?.Comment;
+                request.Status = "InApproval";
+            }
+            else if (role.Equals("Admin", StringComparison.OrdinalIgnoreCase))
+            {
+                // Step 2: Admin can only approve after Approver did step 1
+                var step1 = steps.FirstOrDefault(s => s.Order == 1);
+                if (step1?.Status != "Approved")
+                    return BadRequest("Approver must approve first before Admin.");
+
+                if (request.Status != "InApproval")
+                    return BadRequest("Request must be in InApproval status for Admin.");
+
+                var step2 = steps.FirstOrDefault(s => s.Order == 2);
+                if (step2 == null || step2.Status != "Pending")
+                    return BadRequest("Approval step not available.");
+
+                step2.Status = "Approved";
+                step2.ApproverId = GetCurrentUserId();
+                step2.ApprovedAt = DateTime.UtcNow;
+                step2.Comment = dto?.Comment;
+                request.Status = "Approved";
+            }
+
+            await _context.SaveChangesAsync();
             return Ok(request);
         }
 
         [HttpPost("{id}/reject")]
-        public async Task<IActionResult> Reject(int id, [FromBody] string? comment)
+        public async Task<IActionResult> Reject(int id, [FromBody] CommentDto? dto)
         {
             var role = GetCurrentUserRole();
-            if (!role.Equals("Approver", StringComparison.OrdinalIgnoreCase) && !role.Equals("Admin", StringComparison.OrdinalIgnoreCase))
+            if (!role.Equals("Approver", StringComparison.OrdinalIgnoreCase) &&
+                !role.Equals("Admin", StringComparison.OrdinalIgnoreCase))
                 return StatusCode(403, "Only approvers or admin can reject.");
 
             var request = await _requestRepo.GetByIdAsync(id);
             if (request == null) return NotFound();
-            if (request.Status != "Submitted") return BadRequest($"Cannot reject: status is {request.Status}.");
+
+            if (request.Status != "Submitted" && request.Status != "InApproval")
+                return BadRequest($"Cannot reject: status is {request.Status}.");
+
+            // Mark the current pending step as rejected
+            var steps = await _context.ApprovalSteps
+                .Where(s => s.RequestId == id)
+                .OrderBy(s => s.Order)
+                .ToListAsync();
+
+            var currentStep = steps.FirstOrDefault(s => s.Status == "Pending");
+            if (currentStep != null)
+            {
+                currentStep.Status = "Rejected";
+                currentStep.ApproverId = GetCurrentUserId();
+                currentStep.ApprovedAt = DateTime.UtcNow;
+                currentStep.Comment = dto?.Comment;
+            }
 
             request.Status = "Rejected";
-            await _requestRepo.UpdateAsync(request);
+            await _context.SaveChangesAsync();
             return Ok(request);
         }
 
@@ -108,11 +174,26 @@ namespace RequestHub.Controllers
         public async Task<IActionResult> GetPendingForCurrentUser()
         {
             var role = GetCurrentUserRole();
-            if (!role.Equals("Approver", StringComparison.OrdinalIgnoreCase) && !role.Equals("Admin", StringComparison.OrdinalIgnoreCase))
-                return Ok(new List<AccessRequest>());
 
-            var requests = await _context.AccessRequests.Where(r => r.Status == "Submitted").ToListAsync();
-            return Ok(requests);
+            // Approver sees Submitted requests (step 1)
+            if (role.Equals("Approver", StringComparison.OrdinalIgnoreCase))
+            {
+                var requests = await _context.AccessRequests
+                    .Where(r => r.Status == "Submitted")
+                    .ToListAsync();
+                return Ok(requests);
+            }
+
+            // Admin sees InApproval requests (step 2)
+            if (role.Equals("Admin", StringComparison.OrdinalIgnoreCase))
+            {
+                var requests = await _context.AccessRequests
+                    .Where(r => r.Status == "InApproval")
+                    .ToListAsync();
+                return Ok(requests);
+            }
+
+            return Ok(new List<AccessRequest>());
         }
 
         [HttpGet("report")]
@@ -121,8 +202,12 @@ namespace RequestHub.Controllers
             var userId = GetCurrentUserId();
             var requests = await _context.AccessRequests.Where(r => r.CreatedBy == userId).ToListAsync();
             var csv = "Id,Title,Resource,AccessType,Status,CreatedAt\n" +
-                string.Join("\n", requests.Select(r => $"{r.Id},{r.Title},{r.Resource},{r.AccessType},{r.Status},{r.CreatedAt:yyyy-MM-dd HH:mm}"));
+                string.Join("\n", requests.Select(r =>
+                    $"{r.Id},{r.Title},{r.Resource},{r.AccessType},{r.Status},{r.CreatedAt:yyyy-MM-dd HH:mm}"));
             return File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv", "requests.csv");
         }
     }
+
+    // DTO for comment body
+    public record CommentDto(string? Comment);
 }

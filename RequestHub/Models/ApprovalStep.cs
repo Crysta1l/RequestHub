@@ -2,17 +2,15 @@
 {
     public class ApprovalStep
     {
-        // Who approved
         public int Id { get; set; }
-        public int RequestId { get; set; }     // Which request this belongs to
-        public int ApproverId { get; set; }   // User who must approve
-        public int Order { get; set; }        // 1, 2, 3  sequence
+        public int RequestId { get; set; }
+        public int Order { get; set; }        // 1 = Approver, 2 = Admin
         public string Status { get; set; } = "Pending"; // Pending, Approved, Rejected
         public string? Comment { get; set; }
-        public DateTime ApprovedAt { get; set; } = DateTime.UtcNow;
+        public int? ApproverId { get; set; }  // filled when approved
+        public DateTime? ApprovedAt { get; set; }
 
         public AccessRequest Request { get; set; } = null!;
-        public User Approver { get; set; } = null!;
+        public User? Approver { get; set; }
     }
 }
- 

@@ -2,22 +2,25 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>RequestHub · Create Request</title>
+    <title>RequestHub · New Request</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
-        <h1>New Access Request</h1>
+        <h1>New Request</h1>
+
         <form id="requestForm">
-            <div>
+            <div class="form-group">
                 <label for="title">Title</label>
-                <input type="text" id="title" required>
+                <input type="text" id="title" placeholder="e.g. Access to Projects folder" required>
             </div>
-            <div>
+
+            <div class="form-group">
                 <label for="resource">Resource</label>
-                <input type="text" id="resource" required>
+                <input type="text" id="resource" placeholder="e.g. /projects or Jira" required>
             </div>
-            <div>
+
+            <div class="form-group">
                 <label for="accessType">Access Type</label>
                 <select id="accessType">
                     <option value="Read">Read</option>
@@ -26,19 +29,26 @@
                     <option value="Admin">Admin</option>
                 </select>
             </div>
-            <div>
+
+            <div class="form-group">
                 <label for="justification">Justification</label>
-                <textarea id="justification" rows="3"></textarea>
+                <textarea id="justification" rows="3" placeholder="Why do you need this access?"></textarea>
             </div>
-            <div>
+
+            <div class="form-group">
                 <label for="basis">Basis (HR ticket / document)</label>
-                <input type="text" id="basis" placeholder="e.g., HR-123">
+                <input type="text" id="basis" placeholder="e.g. HR-123">
             </div>
-            <button type="submit">Submit Request</button>
-            <button type="button" id="cancelBtn">Cancel</button>
-            <div id="message"></div>
+
+            <div class="top-bar">
+                <button type="button" id="cancelBtn" class="btn-danger">Cancel</button>
+                <button type="submit">Create Request</button>
+            </div>
+
+            <div class="message" id="message"></div>
         </form>
     </div>
+
     <script src="app.js"></script>
 </body>
 </html>

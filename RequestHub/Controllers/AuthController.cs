@@ -1,5 +1,4 @@
-﻿using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using RequestHub.DTOs;
 using RequestHub.Interfaces;
@@ -23,25 +22,21 @@ namespace RequestHub.Controllers
             _configuration = configuration;
         }
 
-
         [HttpPost("register")]
         public async Task<IActionResult> Register(RegisterDto dto)
         {
             if (await _userRepository.GetByEmailAsync(dto.Email) != null)
                 return BadRequest("Email already exists");
 
-
             var user = new User
             {
                 Email = dto.Email,
                 HashPassword = BCrypt.Net.BCrypt.HashPassword(dto.Password),
-                Role = "Requested"
+                Role = "Requester" 
             };
 
             await _userRepository.AddAsync(user);
-
-            return Ok( new {user.Id, user.Email, user.Role }  );
-
+            return Ok(new { user.Id, user.Email, user.Role });
         }
 
         [HttpPost("login")]
@@ -55,13 +50,11 @@ namespace RequestHub.Controllers
             return Ok(new { token, user.Email, user.Role });
         }
 
-
         private string GenerateJwtToken(User user)
         {
             var jwtSettings = _configuration.GetSection("JwtSettings");
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings["SecretKey"]!));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
 
             var claims = new[]
             {
@@ -69,7 +62,6 @@ namespace RequestHub.Controllers
                 new Claim(ClaimTypes.Email, user.Email),
                 new Claim(ClaimTypes.Role, user.Role)
             };
-
 
             var token = new JwtSecurityToken(
                 issuer: jwtSettings["Issuer"],
