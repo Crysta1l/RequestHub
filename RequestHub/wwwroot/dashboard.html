@@ -2,25 +2,23 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Request Hub Dashboard</title>
+    <title>RequestHub · Dashboard</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div>
-        <h1>My Requests</h1>
-        <button id="newRequestBtn">New Request</button>
-        <!-- List of requests (users) -->
+    <div class="container">
+        <h1>RequestHub Dashboard</h1>
+        <div class="top-bar">
+            <button id="newRequestBtn">+ New Request</button>
+            <button id="logoutBtn">Logout</button>
+        </div>
+        
+        <h2>My Requests</h2>
+        <div id="myRequestsList"></div>
+        
+        <h2>Pending Approval</h2>
+        <div id="pendingList"></div>
     </div>
-
-    <hr>
-
-    <h2>Pending approval</h2>
-    <div id="pendingList">
-        <!-- Requests awaiting current users approval -->
-    </div>
-
-    <button id="logoutBtn">Logout</button>
     <script src="app.js"></script>
 </body>
 </html>

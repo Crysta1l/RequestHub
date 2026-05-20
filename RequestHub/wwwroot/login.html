@@ -9,17 +9,20 @@
     <div class="container">
         <h1>RequestHub</h1>
         <div class="card">
-            <input type="email" id="email" placeholder="Email" value="">
-            <input type="password" id="password" placeholder="Password" value="">
-            <button id="loginBtn">Login</button>
-            <div id="message"></div>
+            <form id="loginForm" onsubmit="return false;">
+                <h2>Login</h2>
+                <input type="email" id="loginEmail" placeholder="Email" value="qwe@mail.ru">
+                <input type="password" id="loginPassword" placeholder="Password" value="">
+                <button id="loginBtn">Login</button>
+                <p id="loginMessage" class="message"></p>
+            </form>
             <hr>
             <button id="showRegBtn" class="secondary">Create account</button>
-            <div id="regForm" style="display:none; margin-top: 1rem;">
+            <form id="regForm" style="display:none;" onsubmit="return false;">
                 <input type="email" id="regEmail" placeholder="Email">
                 <input type="password" id="regPassword" placeholder="Password">
-                <button id="doRegBtn">Register</button>
-            </div>
+                <button id="registerBtn">Register</button>
+            </form>
         </div>
     </div>
     <script src="app.js"></script>

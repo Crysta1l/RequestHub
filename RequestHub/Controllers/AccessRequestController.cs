@@ -7,6 +7,7 @@ using RequestHub.DTOs;
 using RequestHub.Interfaces;
 using RequestHub.Models;
 using System.Security.Claims;
+using System.Text;
 
 namespace RequestHub.Controllers
 {
@@ -158,5 +159,56 @@ namespace RequestHub.Controllers
                 .ToListAsync();
             return Ok(steps);
         }
+
+
+        [HttpGet]
+        public async Task<IActionResult> GetMyRequests(
+        [FromQuery] string? status = null,
+        [FromQuery] string? resource = null)
+        {
+            var userId = GetCurrentUserId();
+            var query = _context.AccessRequests.Where(r => r.CreatedBy == userId);
+
+            if (!string.IsNullOrEmpty(status))
+                query = query.Where(r => r.Status == status);
+            if (!string.IsNullOrEmpty(resource))
+                query = query.Where(r => r.Resource.Contains(resource));
+
+            var requests = await query.OrderByDescending(r => r.CreatedAt).ToListAsync();
+            return Ok(requests);
+        }
+
+
+        [HttpGet("report")]
+        public async Task<IActionResult> GetReport()
+        {
+            var userId = GetCurrentUserId();
+            var requests = await _context.AccessRequests
+                .Where(r => r.CreatedBy == userId)
+                .ToListAsync();
+
+            var csv = new StringBuilder();
+            csv.AppendLine("Id,Title,Resource,AccessType,Status,CreatedAt");
+            foreach (var r in requests)
+            {
+                csv.AppendLine($"{r.Id},{r.Title},{r.Resource},{r.AccessType},{r.Status},{r.CreatedAt:yyyy-MM-dd HH:mm}");
+            }
+            return File(Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", "requests.csv");
+        }
+
+
+        [HttpPost("{id}/upload")]
+        public async Task<IActionResult> UploadFile(int id, IFormFile file)
+        {
+            var request = await _requestRepo.GetByIdAsync(id);
+            if (request == null) return NotFound();
+            var uploads = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
+            if (!Directory.Exists(uploads)) Directory.CreateDirectory(uploads);
+            var filePath = Path.Combine(uploads, $"{id}_{file.FileName}");
+            using (var stream = new FileStream(filePath, FileMode.Create))
+                await file.CopyToAsync(stream);
+            return Ok(new { filePath });
+        }
+
     }
 }

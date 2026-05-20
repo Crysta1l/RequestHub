@@ -1,32 +1,38 @@
 // Shared helpers
-const API_BASE = ''; // relative to origin
+const API_BASE = '';
 let token = localStorage.getItem('token');
 
-function handleFetchError(err) {
-    console.error(err);
-    showMessage('Network error. Is the API running?', true);
-}
-
-function showMessage(msg, isError = false) {
-    const msgDiv = document.getElementById('message');
-    if (msgDiv) {
-        msgDiv.innerText = msg;
-        msgDiv.style.color = isError ? '#f99' : '#9f9';
+function showMessage(el, msg, isError = false) {
+    if (el) {
+        el.innerText = msg;
+        el.style.color = isError ? '#f99' : '#9f9';
     }
 }
 
-// Redirect if not logged in (except on login page)
-if (!token && !window.location.pathname.includes('login.html')) {
-    window.location.href = 'login.html';
+function redirectIfNotLoggedIn() {
+    if (!token && !window.location.pathname.includes('index.html')) {
+        window.location.href = 'index.html';
+    }
 }
 
 // ----- LOGIN PAGE -----
-if (window.location.pathname.includes('login.html')) {
+if (window.location.pathname.includes('index.html')) {
     const loginBtn = document.getElementById('loginBtn');
+    const showRegBtn = document.getElementById('showRegBtn');
+    const regForm = document.getElementById('regForm');
+    const registerBtn = document.getElementById('registerBtn');
+    const loginMessage = document.getElementById('loginMessage');
+
+    if (showRegBtn && regForm) {
+        showRegBtn.addEventListener('click', () => {
+            regForm.style.display = regForm.style.display === 'none' ? 'block' : 'none';
+        });
+    }
+
     if (loginBtn) {
-        loginBtn.onclick = async () => {
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
+        loginBtn.addEventListener('click', async () => {
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
             try {
                 const res = await fetch('/api/Auth/login', {
                     method: 'POST',
@@ -38,19 +44,43 @@ if (window.location.pathname.includes('login.html')) {
                     localStorage.setItem('token', data.token);
                     window.location.href = 'dashboard.html';
                 } else {
-                    showMessage('Login failed: ' + (data.title || data.message || 'Invalid credentials'), true);
+                    showMessage(loginMessage, 'Login failed', true);
                 }
             } catch (err) {
-                showMessage('Cannot connect to API', true);
+                showMessage(loginMessage, 'Network error', true);
             }
-        };
+        });
+    }
+
+    if (registerBtn) {
+        registerBtn.addEventListener('click', async () => {
+            const email = document.getElementById('regEmail').value;
+            const password = document.getElementById('regPassword').value;
+            try {
+                const res = await fetch('/api/Auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                if (res.ok) {
+                    alert('Registration successful! You can now login.');
+                    regForm.style.display = 'none';
+                } else {
+                    alert('Registration failed');
+                }
+            } catch (err) {
+                alert('Network error');
+            }
+        });
     }
 }
 
 // ----- DASHBOARD PAGE -----
 if (window.location.pathname.includes('dashboard.html')) {
+    redirectIfNotLoggedIn();
     const token = localStorage.getItem('token');
-    if (!token) window.location.href = 'login.html';
+    const myRequestsDiv = document.getElementById('myRequestsList');
+    const pendingDiv = document.getElementById('pendingList');
 
     async function loadDashboard() {
         try {
@@ -59,20 +89,35 @@ if (window.location.pathname.includes('dashboard.html')) {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const myRequests = await myRes.json();
-            const listDiv = document.getElementById('requestsList');
-            if (listDiv) {
-                listDiv.innerHTML = myRequests.map(r => `
-                    <div class="request-card" data-id="${r.id}">
-                        <strong>${escapeHtml(r.title)}</strong><br>
-                        Resource: ${escapeHtml(r.resource)}<br>
-                        Status: ${r.status}<br>
-                        <button class="viewBtn" data-id="${r.id}">View Details</button>
-                    </div>
-                `).join('');
-                document.querySelectorAll('.viewBtn').forEach(btn => {
-                    btn.onclick = () => window.location.href = `request.html?id=${btn.dataset.id}`;
+            myRequestsDiv.innerHTML = myRequests.map(r => `
+                <div class="request-card" data-id="${r.id}">
+                    <strong>${escapeHtml(r.title)}</strong><br>
+                    Resource: ${escapeHtml(r.resource)}<br>
+                    Status: ${r.status}<br>
+                    ${r.status === 'Draft' ? `<button class="submitBtn" data-id="${r.id}">Submit</button>` : ''}
+                    <button class="viewBtn" data-id="${r.id}">View Details</button>
+                </div>
+            `).join('');
+
+            // Submit buttons
+            document.querySelectorAll('.submitBtn').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const id = btn.dataset.id;
+                    const res = await fetch(`/api/AccessRequest/${id}/submit`, {
+                        method: 'PATCH',
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (res.ok) loadDashboard();
+                    else alert('Submit failed');
                 });
-            }
+            });
+
+            // View buttons
+            document.querySelectorAll('.viewBtn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    window.location.href = `request.html?id=${btn.dataset.id}`;
+                });
+            });
 
             // Pending approvals
             const pendingRes = await fetch('/api/AccessRequest/pending', {
@@ -80,115 +125,122 @@ if (window.location.pathname.includes('dashboard.html')) {
             });
             if (pendingRes.ok) {
                 const pending = await pendingRes.json();
-                const pendingDiv = document.getElementById('pendingList');
-                if (pendingDiv) {
-                    pendingDiv.innerHTML = pending.map(r => `
-                        <div class="request-card" data-id="${r.id}">
-                            <strong>${escapeHtml(r.title)}</strong> (Requester: ${r.createdBy})<br>
-                            Resource: ${escapeHtml(r.resource)}<br>
-                            <button class="approveBtn" data-id="${r.id}">Approve</button>
-                            <button class="rejectBtn" data-id="${r.id}">Reject</button>
-                        </div>
-                    `).join('');
-                    document.querySelectorAll('.approveBtn').forEach(btn => {
-                        btn.onclick = async () => {
-                            const id = btn.dataset.id;
-                            const res = await fetch(`/api/AccessRequest/${id}/approve`, {
-                                method: 'POST',
-                                headers: {
-                                    'Authorization': `Bearer ${token}`,
-                                    'Content-Type': 'application/json'
-                                },
-                                body: JSON.stringify(null)
-                            });
-                            if (res.ok) loadDashboard();
-                            else showMessage('Approve failed', true);
-                        };
+                pendingDiv.innerHTML = pending.map(r => `
+                    <div class="request-card">
+                        <strong>${escapeHtml(r.title)}</strong><br>
+                        Requester: ${r.createdBy}<br>
+                        Resource: ${escapeHtml(r.resource)}<br>
+                        <button class="approvePendingBtn" data-id="${r.id}">Approve</button>
+                        <button class="rejectPendingBtn" data-id="${r.id}">Reject</button>
+                        <button class="viewBtn" data-id="${r.id}">View Details</button>
+                    </div>
+                `).join('');
+
+                document.querySelectorAll('.approvePendingBtn').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        const id = btn.dataset.id;
+                        const res = await fetch(`/api/AccessRequest/${id}/approve`, {
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                            body: JSON.stringify(null)
+                        });
+                        if (res.ok) loadDashboard();
+                        else alert('Approve failed');
                     });
-                    document.querySelectorAll('.rejectBtn').forEach(btn => {
-                        btn.onclick = async () => {
-                            const id = btn.dataset.id;
-                            const res = await fetch(`/api/AccessRequest/${id}/reject`, {
-                                method: 'POST',
-                                headers: {
-                                    'Authorization': `Bearer ${token}`,
-                                    'Content-Type': 'application/json'
-                                },
-                                body: JSON.stringify(null)
-                            });
-                            if (res.ok) loadDashboard();
-                            else showMessage('Reject failed', true);
-                        };
+                });
+                document.querySelectorAll('.rejectPendingBtn').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        const id = btn.dataset.id;
+                        const res = await fetch(`/api/AccessRequest/${id}/reject`, {
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                            body: JSON.stringify(null)
+                        });
+                        if (res.ok) loadDashboard();
+                        else alert('Reject failed');
                     });
-                }
+                });
+                document.querySelectorAll('.viewBtn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        window.location.href = `request.html?id=${btn.dataset.id}`;
+                    });
+                });
             }
         } catch (err) {
-            handleFetchError(err);
+            console.error(err);
         }
     }
 
-    document.getElementById('newRequestBtn').onclick = () => window.location.href = 'create.html';
-    document.getElementById('logoutBtn').onclick = () => {
+    document.getElementById('newRequestBtn').addEventListener('click', () => {
+        window.location.href = 'create.html';
+    });
+    document.getElementById('logoutBtn').addEventListener('click', () => {
         localStorage.removeItem('token');
-        window.location.href = 'login.html';
-    };
+        window.location.href = 'index.html';
+    });
+
     loadDashboard();
 }
 
 // ----- CREATE REQUEST PAGE -----
 if (window.location.pathname.includes('create.html')) {
+    redirectIfNotLoggedIn();
+    const token = localStorage.getItem('token');
     const form = document.getElementById('requestForm');
     const cancelBtn = document.getElementById('cancelBtn');
-    const token = localStorage.getItem('token');
 
-    form.onsubmit = async (e) => {
-        e.preventDefault();
-        const payload = {
-            title: document.getElementById('title').value,
-            resource: document.getElementById('resource').value,
-            accessType: document.getElementById('accessType').value,
-            justification: document.getElementById('justification').value,
-            basis: document.getElementById('basis').value || null
-        };
-        try {
-            const res = await fetch('/api/AccessRequest', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify(payload)
-            });
-            if (res.ok) {
-                showMessage('Request created! Redirecting...', false);
-                setTimeout(() => window.location.href = 'dashboard.html', 1500);
-            } else {
-                const err = await res.text();
-                showMessage('Error: ' + err, true);
+    if (form) {
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const payload = {
+                title: document.getElementById('title').value,
+                resource: document.getElementById('resource').value,
+                accessType: document.getElementById('accessType').value,
+                justification: document.getElementById('justification').value,
+                basis: document.getElementById('basis').value || null
+            };
+            try {
+                const res = await fetch('/api/AccessRequest', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(payload)
+                });
+                if (res.ok) {
+                    alert('Request created!');
+                    window.location.href = 'dashboard.html';
+                } else {
+                    alert('Creation failed');
+                }
+            } catch (err) {
+                alert('Network error');
             }
-        } catch (err) {
-            handleFetchError(err);
-        }
-    };
-    if (cancelBtn) cancelBtn.onclick = () => window.location.href = 'dashboard.html';
+        });
+    }
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => window.location.href = 'dashboard.html');
+    }
 }
 
 // ----- REQUEST DETAIL PAGE -----
 if (window.location.pathname.includes('request.html')) {
+    redirectIfNotLoggedIn();
+    const token = localStorage.getItem('token');
     const urlParams = new URLSearchParams(window.location.search);
     const requestId = urlParams.get('id');
-    const token = localStorage.getItem('token');
-    const infoDiv = document.getElementById('requestInfo');
-    const approvalDiv = document.getElementById('approvalSection');
+    const requestInfo = document.getElementById('requestInfo');
+    const approvalSection = document.getElementById('approvalSection');
 
     async function loadRequest() {
         try {
             const res = await fetch(`/api/AccessRequest/${requestId}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            if (!res.ok) throw new Error('Not found');
+            if (!res.ok) throw new Error();
             const req = await res.json();
-            infoDiv.innerHTML = `
+            requestInfo.innerHTML = `
                 <p><strong>Title:</strong> ${escapeHtml(req.title)}</p>
                 <p><strong>Resource:</strong> ${escapeHtml(req.resource)}</p>
                 <p><strong>Access Type:</strong> ${escapeHtml(req.accessType)}</p>
@@ -197,41 +249,38 @@ if (window.location.pathname.includes('request.html')) {
                 <p><strong>Status:</strong> ${req.status}</p>
                 <p><strong>Created:</strong> ${new Date(req.createdAt).toLocaleString()}</p>
             `;
-            // Show approve/reject if current user is approver and status is Submitted
-            const role = localStorage.getItem('role'); // we could store role on login
-            // For simplicity, just show buttons if status == "Submitted" (allow any logged user to act)
-            // In real app, check role via /me endpoint.
             if (req.status === 'Submitted') {
-                approvalDiv.innerHTML = `
+                approvalSection.innerHTML = `
                     <button id="approveBtn">Approve</button>
                     <button id="rejectBtn">Reject</button>
                 `;
-                document.getElementById('approveBtn').onclick = async () => {
+                document.getElementById('approveBtn').addEventListener('click', async () => {
                     const resp = await fetch(`/api/AccessRequest/${requestId}/approve`, {
                         method: 'POST',
                         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
                         body: JSON.stringify(null)
                     });
                     if (resp.ok) loadRequest();
-                    else showMessage('Approve failed', true);
-                };
-                document.getElementById('rejectBtn').onclick = async () => {
+                    else alert('Approve failed');
+                });
+                document.getElementById('rejectBtn').addEventListener('click', async () => {
                     const resp = await fetch(`/api/AccessRequest/${requestId}/reject`, {
                         method: 'POST',
                         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
                         body: JSON.stringify(null)
                     });
                     if (resp.ok) loadRequest();
-                    else showMessage('Reject failed', true);
-                };
+                    else alert('Reject failed');
+                });
             } else {
-                approvalDiv.innerHTML = '<p>No actions available.</p>';
+                approvalSection.innerHTML = '<p>No actions available.</p>';
             }
         } catch (err) {
-            infoDiv.innerHTML = '<p>Request not found.</p>';
+            requestInfo.innerHTML = '<p>Request not found.</p>';
         }
     }
-    document.getElementById('backBtn').onclick = () => window.location.href = 'dashboard.html';
+
+    document.getElementById('backBtn').addEventListener('click', () => window.location.href = 'dashboard.html');
     if (requestId) loadRequest();
 }
 
@@ -244,19 +293,3 @@ function escapeHtml(str) {
         return m;
     });
 }
-
-// reg
-document.getElementById('showRegBtn')?.addEventListener('click', () => {
-    document.getElementById('regForm').style.display = 'block';
-});
-document.getElementById('doRegBtn')?.addEventListener('click', async () => {
-    const email = document.getElementById('regEmail').value;
-    const password = document.getElementById('regPassword').value;
-    const res = await fetch('/api/Auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-    });
-    if (res.ok) alert('Registered! You can now login.');
-    else alert('Registration failed');
-});

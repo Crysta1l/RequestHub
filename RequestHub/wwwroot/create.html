@@ -2,12 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RequestHub Create Request</title>
+    <title>RequestHub · Create Request</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div>
+    <div class="container">
         <h1>New Access Request</h1>
         <form id="requestForm">
             <div>
@@ -28,13 +27,17 @@
                 </select>
             </div>
             <div>
-                <label for="justification" id="justification" >Justification</label>
-                <input type="text" id="basis" placeholder="HR-123">
+                <label for="justification">Justification</label>
+                <textarea id="justification" rows="3"></textarea>
             </div>
-            <button type="submit">Submit Request</button> 
+            <div>
+                <label for="basis">Basis (HR ticket / document)</label>
+                <input type="text" id="basis" placeholder="e.g., HR-123">
+            </div>
+            <button type="submit">Submit Request</button>
             <button type="button" id="cancelBtn">Cancel</button>
+            <div id="message"></div>
         </form>
-        <div id="message"></div>
     </div>
     <script src="app.js"></script>
 </body>
