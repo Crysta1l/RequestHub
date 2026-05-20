@@ -55,23 +55,32 @@ namespace RequestHub.Controllers
 
         }
 
-        [HttpPatch("{id}/sumbit")]
-        public async Task<IActionResult> Sumbit(int id)
+        [HttpPatch("{id}/submit")]
+        public async Task<IActionResult> Submit(int id)
         {
+            var userId = GetCurrentUserID();
             var request = await _requestRepo.GetByIdAsync(id);
-
-            if (request == null)
-                return NotFound();
-
-            if (request.CreatedBy != GetCurrentUserID())
-                return Forbid();
-
-            if (request.Status != "Draft")
-                return BadRequest("Only draft request can be sumbitted");
+            if (request == null) return NotFound();
+            if (request.CreatedBy != userId) return Forbid();
+            if (request.Status != "Draft") return BadRequest("Only draft requests can be submitted");
 
             request.Status = "Submitted";
-
             await _requestRepo.UpdateAsync(request);
+
+            // Create approval steps (example: hardcoded approver IDs – replace with real logic later)
+            var approverIds = new[] { 2, 3 }; // IDs of users with role "Approver"
+            for (int i = 0; i < approverIds.Length; i++)
+            {
+                var step = new ApprovalStep
+                {
+                    RequestId = request.Id,
+                    ApproverId = approverIds[i],
+                    Order = i + 1,
+                    Status = "Pending"
+                };
+                _context.ApprovalSteps.Add(step);
+            }
+            await _context.SaveChangesAsync();
 
             return Ok(request);
         }
