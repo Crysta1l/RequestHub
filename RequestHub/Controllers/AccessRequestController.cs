@@ -7,7 +7,6 @@ using RequestHub.DTOs;
 using RequestHub.Interfaces;
 using RequestHub.Models;
 using System.Security.Claims;
-using System.Text;
 
 namespace RequestHub.Controllers
 {
@@ -17,36 +16,34 @@ namespace RequestHub.Controllers
     public class AccessRequestController : ControllerBase
     {
         private readonly IAccessRequestRepository _requestRepo;
-        private readonly IUserRepository _userRepo;
         private readonly AppDbContext _context;
         private readonly IMapper _mapper;
 
-        public AccessRequestController(IAccessRequestRepository requestRepo, IUserRepository userRepo, AppDbContext context, IMapper mapper)
+        public AccessRequestController(IAccessRequestRepository requestRepo, AppDbContext context, IMapper mapper)
         {
             _requestRepo = requestRepo;
-            _userRepo = userRepo;
             _context = context;
             _mapper = mapper;
         }
 
         private int GetCurrentUserId() => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        private string GetCurrentUserRole() => User.FindFirstValue(ClaimTypes.Role)!;
+        private string GetCurrentUserRole() => User.FindFirstValue(ClaimTypes.Role) ?? "";
 
         [HttpGet]
-        public async Task<IActionResult> GetMyRequests()
+        public async Task<IActionResult> GetMyRequests([FromQuery] string? status = null, [FromQuery] string? resource = null)
         {
             var userId = GetCurrentUserId();
-            var requests = await _requestRepo.GetByUserIdAsync(userId);
-            return Ok(requests);
+            var query = _context.AccessRequests.Where(r => r.CreatedBy == userId);
+            if (!string.IsNullOrEmpty(status)) query = query.Where(r => r.Status == status);
+            if (!string.IsNullOrEmpty(resource)) query = query.Where(r => r.Resource.Contains(resource));
+            return Ok(await query.OrderByDescending(r => r.CreatedAt).ToListAsync());
         }
 
         [HttpGet("{id}")]
         public async Task<IActionResult> GetRequest(int id)
         {
-            var userId = GetCurrentUserId();
             var request = await _requestRepo.GetByIdAsync(id);
             if (request == null) return NotFound();
-            if (request.CreatedBy != userId && GetCurrentUserRole() != "Admin") return Forbid();
             return Ok(request);
         }
 
@@ -72,143 +69,60 @@ namespace RequestHub.Controllers
 
             request.Status = "Submitted";
             await _requestRepo.UpdateAsync(request);
-
-            // Create approval steps – hardcoded approver IDs (replace with real logic)
-            // Here we assign approvers: user IDs 2 and 3 (must exist in Users table)
-            var approverIds = new[] { 2, 3 };
-            for (int i = 0; i < approverIds.Length; i++)
-            {
-                var step = new ApprovalStep
-                {
-                    RequestId = request.Id,
-                    ApproverId = approverIds[i],
-                    Order = i + 1,
-                    Status = "Pending"
-                };
-                _context.ApprovalSteps.Add(step);
-            }
-            await _context.SaveChangesAsync();
             return Ok(request);
         }
 
         [HttpPost("{id}/approve")]
         public async Task<IActionResult> Approve(int id, [FromBody] string? comment)
         {
-            var userId = GetCurrentUserId();
             var role = GetCurrentUserRole();
-            if (role != "Approver" && role != "Admin") return Forbid("Only approvers can approve");
+            if (!role.Equals("Approver", StringComparison.OrdinalIgnoreCase) && !role.Equals("Admin", StringComparison.OrdinalIgnoreCase))
+                return StatusCode(403, "Only approvers or admin can approve.");
 
             var request = await _requestRepo.GetByIdAsync(id);
             if (request == null) return NotFound();
-            if (request.Status != "Submitted") return BadRequest("Request not in submitted state");
+            if (request.Status != "Submitted") return BadRequest($"Cannot approve: status is {request.Status}.");
 
-            // Find current pending step for this user
-            var step = await _context.ApprovalSteps
-                .FirstOrDefaultAsync(s => s.RequestId == id && s.ApproverId == userId && s.Status == "Pending");
-            if (step == null) return BadRequest("No pending approval step for you");
-
-            step.Status = "Approved";
-            step.Comment = comment;
-            step.ApprovedAt = DateTime.UtcNow;
-            _context.ApprovalSteps.Update(step);
-            await _context.SaveChangesAsync();
-
-            // Check if all steps are approved
-            var allSteps = await _context.ApprovalSteps.Where(s => s.RequestId == id).ToListAsync();
-            if (allSteps.All(s => s.Status == "Approved"))
-            {
-                request.Status = "Approved";
-                await _requestRepo.UpdateAsync(request);
-            }
+            request.Status = "Approved";
+            await _requestRepo.UpdateAsync(request);
             return Ok(request);
         }
 
         [HttpPost("{id}/reject")]
         public async Task<IActionResult> Reject(int id, [FromBody] string? comment)
         {
-            var userId = GetCurrentUserId();
             var role = GetCurrentUserRole();
-            if (role != "Approver" && role != "Admin") return Forbid("Only approvers can reject");
+            if (!role.Equals("Approver", StringComparison.OrdinalIgnoreCase) && !role.Equals("Admin", StringComparison.OrdinalIgnoreCase))
+                return StatusCode(403, "Only approvers or admin can reject.");
 
             var request = await _requestRepo.GetByIdAsync(id);
             if (request == null) return NotFound();
-            if (request.Status != "Submitted") return BadRequest("Request not in submitted state");
+            if (request.Status != "Submitted") return BadRequest($"Cannot reject: status is {request.Status}.");
 
-            var step = await _context.ApprovalSteps
-                .FirstOrDefaultAsync(s => s.RequestId == id && s.ApproverId == userId && s.Status == "Pending");
-            if (step == null) return BadRequest("No pending approval step for you");
-
-            step.Status = "Rejected";
-            step.Comment = comment;
-            step.ApprovedAt = DateTime.UtcNow;
-            _context.ApprovalSteps.Update(step);
             request.Status = "Rejected";
             await _requestRepo.UpdateAsync(request);
-            await _context.SaveChangesAsync();
             return Ok(request);
         }
 
         [HttpGet("pending")]
         public async Task<IActionResult> GetPendingForCurrentUser()
         {
-            var userId = GetCurrentUserId();
-            var steps = await _context.ApprovalSteps
-                .Include(s => s.Request)
-                .Where(s => s.ApproverId == userId && s.Status == "Pending")
-                .Select(s => s.Request)
-                .ToListAsync();
-            return Ok(steps);
-        }
+            var role = GetCurrentUserRole();
+            if (!role.Equals("Approver", StringComparison.OrdinalIgnoreCase) && !role.Equals("Admin", StringComparison.OrdinalIgnoreCase))
+                return Ok(new List<AccessRequest>());
 
-
-        [HttpGet]
-        public async Task<IActionResult> GetMyRequests(
-        [FromQuery] string? status = null,
-        [FromQuery] string? resource = null)
-        {
-            var userId = GetCurrentUserId();
-            var query = _context.AccessRequests.Where(r => r.CreatedBy == userId);
-
-            if (!string.IsNullOrEmpty(status))
-                query = query.Where(r => r.Status == status);
-            if (!string.IsNullOrEmpty(resource))
-                query = query.Where(r => r.Resource.Contains(resource));
-
-            var requests = await query.OrderByDescending(r => r.CreatedAt).ToListAsync();
+            var requests = await _context.AccessRequests.Where(r => r.Status == "Submitted").ToListAsync();
             return Ok(requests);
         }
-
 
         [HttpGet("report")]
         public async Task<IActionResult> GetReport()
         {
             var userId = GetCurrentUserId();
-            var requests = await _context.AccessRequests
-                .Where(r => r.CreatedBy == userId)
-                .ToListAsync();
-
-            var csv = new StringBuilder();
-            csv.AppendLine("Id,Title,Resource,AccessType,Status,CreatedAt");
-            foreach (var r in requests)
-            {
-                csv.AppendLine($"{r.Id},{r.Title},{r.Resource},{r.AccessType},{r.Status},{r.CreatedAt:yyyy-MM-dd HH:mm}");
-            }
-            return File(Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", "requests.csv");
+            var requests = await _context.AccessRequests.Where(r => r.CreatedBy == userId).ToListAsync();
+            var csv = "Id,Title,Resource,AccessType,Status,CreatedAt\n" +
+                string.Join("\n", requests.Select(r => $"{r.Id},{r.Title},{r.Resource},{r.AccessType},{r.Status},{r.CreatedAt:yyyy-MM-dd HH:mm}"));
+            return File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv", "requests.csv");
         }
-
-
-        [HttpPost("{id}/upload")]
-        public async Task<IActionResult> UploadFile(int id, IFormFile file)
-        {
-            var request = await _requestRepo.GetByIdAsync(id);
-            if (request == null) return NotFound();
-            var uploads = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
-            if (!Directory.Exists(uploads)) Directory.CreateDirectory(uploads);
-            var filePath = Path.Combine(uploads, $"{id}_{file.FileName}");
-            using (var stream = new FileStream(filePath, FileMode.Create))
-                await file.CopyToAsync(stream);
-            return Ok(new { filePath });
-        }
-
     }
 }

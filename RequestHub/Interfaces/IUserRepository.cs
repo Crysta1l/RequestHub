@@ -9,5 +9,7 @@ namespace RequestHub.Interfaces
         Task AddAsync(User user);
 
         Task<User?> GetByIdAsync(int id);
+
+        Task<List<User>> GetApproversAsync();
     }
 }

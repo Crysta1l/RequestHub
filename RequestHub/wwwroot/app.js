@@ -1,22 +1,17 @@
-// Shared helpers
-const API_BASE = '';
+// ---------- SHARED ----------
 let token = localStorage.getItem('token');
 
-function showMessage(el, msg, isError = false) {
-    if (el) {
-        el.innerText = msg;
-        el.style.color = isError ? '#f99' : '#9f9';
-    }
+if (!token && !window.location.pathname.includes('login.html') && !window.location.pathname.includes('index.html')) {
+    window.location.href = 'login.html';
 }
 
-function redirectIfNotLoggedIn() {
-    if (!token && !window.location.pathname.includes('index.html')) {
-        window.location.href = 'index.html';
-    }
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>]/g, m => (m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;'));
 }
 
-// ----- LOGIN PAGE -----
-if (window.location.pathname.includes('index.html')) {
+// ---------- LOGIN PAGE ----------
+if (window.location.pathname.includes('login.html') || window.location.pathname.includes('index.html')) {
     const loginBtn = document.getElementById('loginBtn');
     const showRegBtn = document.getElementById('showRegBtn');
     const regForm = document.getElementById('regForm');
@@ -39,15 +34,18 @@ if (window.location.pathname.includes('index.html')) {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, password })
                 });
-                const data = await res.json();
                 if (res.ok) {
+                    const data = await res.json();
                     localStorage.setItem('token', data.token);
                     window.location.href = 'dashboard.html';
                 } else {
-                    showMessage(loginMessage, 'Login failed', true);
+                    const errorText = await res.text();
+                    loginMessage.innerText = errorText || 'Invalid credentials';
+                    loginMessage.style.color = '#f99';
                 }
             } catch (err) {
-                showMessage(loginMessage, 'Network error', true);
+                loginMessage.innerText = 'Network error';
+                loginMessage.style.color = '#f99';
             }
         });
     }
@@ -63,7 +61,7 @@ if (window.location.pathname.includes('index.html')) {
                     body: JSON.stringify({ email, password })
                 });
                 if (res.ok) {
-                    alert('Registration successful! You can now login.');
+                    alert('Registration successful! Please login.');
                     regForm.style.display = 'none';
                 } else {
                     alert('Registration failed');
@@ -75,9 +73,8 @@ if (window.location.pathname.includes('index.html')) {
     }
 }
 
-// ----- DASHBOARD PAGE -----
+// ---------- DASHBOARD PAGE ----------
 if (window.location.pathname.includes('dashboard.html')) {
-    redirectIfNotLoggedIn();
     const token = localStorage.getItem('token');
     const myRequestsDiv = document.getElementById('myRequestsList');
     const pendingDiv = document.getElementById('pendingList');
@@ -90,7 +87,7 @@ if (window.location.pathname.includes('dashboard.html')) {
             });
             const myRequests = await myRes.json();
             myRequestsDiv.innerHTML = myRequests.map(r => `
-                <div class="request-card" data-id="${r.id}">
+                <div class="request-card">
                     <strong>${escapeHtml(r.title)}</strong><br>
                     Resource: ${escapeHtml(r.resource)}<br>
                     Status: ${r.status}<br>
@@ -99,7 +96,6 @@ if (window.location.pathname.includes('dashboard.html')) {
                 </div>
             `).join('');
 
-            // Submit buttons
             document.querySelectorAll('.submitBtn').forEach(btn => {
                 btn.addEventListener('click', async () => {
                     const id = btn.dataset.id;
@@ -111,8 +107,6 @@ if (window.location.pathname.includes('dashboard.html')) {
                     else alert('Submit failed');
                 });
             });
-
-            // View buttons
             document.querySelectorAll('.viewBtn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     window.location.href = `request.html?id=${btn.dataset.id}`;
@@ -132,7 +126,7 @@ if (window.location.pathname.includes('dashboard.html')) {
                         Resource: ${escapeHtml(r.resource)}<br>
                         <button class="approvePendingBtn" data-id="${r.id}">Approve</button>
                         <button class="rejectPendingBtn" data-id="${r.id}">Reject</button>
-                        <button class="viewBtn" data-id="${r.id}">View Details</button>
+                        <button class="viewPendingBtn" data-id="${r.id}">View</button>
                     </div>
                 `).join('');
 
@@ -160,7 +154,7 @@ if (window.location.pathname.includes('dashboard.html')) {
                         else alert('Reject failed');
                     });
                 });
-                document.querySelectorAll('.viewBtn').forEach(btn => {
+                document.querySelectorAll('.viewPendingBtn').forEach(btn => {
                     btn.addEventListener('click', () => {
                         window.location.href = `request.html?id=${btn.dataset.id}`;
                     });
@@ -171,20 +165,19 @@ if (window.location.pathname.includes('dashboard.html')) {
         }
     }
 
-    document.getElementById('newRequestBtn').addEventListener('click', () => {
+    document.getElementById('newRequestBtn')?.addEventListener('click', () => {
         window.location.href = 'create.html';
     });
-    document.getElementById('logoutBtn').addEventListener('click', () => {
+    document.getElementById('logoutBtn')?.addEventListener('click', () => {
         localStorage.removeItem('token');
-        window.location.href = 'index.html';
+        window.location.href = 'login.html';
     });
 
     loadDashboard();
 }
 
-// ----- CREATE REQUEST PAGE -----
+// ---------- CREATE REQUEST PAGE ----------
 if (window.location.pathname.includes('create.html')) {
-    redirectIfNotLoggedIn();
     const token = localStorage.getItem('token');
     const form = document.getElementById('requestForm');
     const cancelBtn = document.getElementById('cancelBtn');
@@ -224,9 +217,8 @@ if (window.location.pathname.includes('create.html')) {
     }
 }
 
-// ----- REQUEST DETAIL PAGE -----
+// ---------- REQUEST DETAIL PAGE ----------
 if (window.location.pathname.includes('request.html')) {
-    redirectIfNotLoggedIn();
     const token = localStorage.getItem('token');
     const urlParams = new URLSearchParams(window.location.search);
     const requestId = urlParams.get('id');
@@ -238,7 +230,7 @@ if (window.location.pathname.includes('request.html')) {
             const res = await fetch(`/api/AccessRequest/${requestId}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            if (!res.ok) throw new Error();
+            if (!res.ok) throw new Error('Not found');
             const req = await res.json();
             requestInfo.innerHTML = `
                 <p><strong>Title:</strong> ${escapeHtml(req.title)}</p>
@@ -280,16 +272,8 @@ if (window.location.pathname.includes('request.html')) {
         }
     }
 
-    document.getElementById('backBtn').addEventListener('click', () => window.location.href = 'dashboard.html');
-    if (requestId) loadRequest();
-}
-
-function escapeHtml(str) {
-    if (!str) return '';
-    return str.replace(/[&<>]/g, function(m) {
-        if (m === '&') return '&amp;';
-        if (m === '<') return '&lt;';
-        if (m === '>') return '&gt;';
-        return m;
+    document.getElementById('backBtn')?.addEventListener('click', () => {
+        window.location.href = 'dashboard.html';
     });
+    if (requestId) loadRequest();
 }

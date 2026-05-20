@@ -27,5 +27,9 @@ namespace RequestHub.Repositories
         {
             return await _context.Users.FindAsync(id);
         }
+        public async Task<List<User>> GetApproversAsync()
+        {
+            return await _context.Users.Where(u => u.Role == "Approver").ToListAsync();
+        }
     }
 }
