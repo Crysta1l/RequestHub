@@ -29,6 +29,20 @@ namespace RequestHub.Controllers
         private int GetCurrentUserId() => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         private string GetCurrentUserRole() => User.FindFirstValue(ClaimTypes.Role) ?? "";
 
+        // Helper to log history
+        private void LogHistory(int requestId, string action, string? oldStatus, string? newStatus)
+        {
+            _context.RequestHistories.Add(new RequestHistory
+            {
+                RequestId = requestId,
+                Action = action,
+                OldStatus = oldStatus,
+                NewStatus = newStatus,
+                PerformedById = GetCurrentUserId(),
+                PerformedAt = DateTime.UtcNow
+            });
+        }
+
         [HttpGet]
         public async Task<IActionResult> GetMyRequests([FromQuery] string? status = null, [FromQuery] string? resource = null)
         {
@@ -47,6 +61,16 @@ namespace RequestHub.Controllers
             return Ok(request);
         }
 
+        [HttpGet("{id}/history")]
+        public async Task<IActionResult> GetHistory(int id)
+        {
+            var history = await _context.RequestHistories
+                .Where(h => h.RequestId == id)
+                .OrderByDescending(h => h.PerformedAt)
+                .ToListAsync();
+            return Ok(history);
+        }
+
         [HttpPost]
         public async Task<IActionResult> Create(CreateRequestDto dto)
         {
@@ -55,6 +79,11 @@ namespace RequestHub.Controllers
             request.Status = "Draft";
             request.CreatedAt = DateTime.UtcNow;
             await _requestRepo.AddAsync(request);
+
+            // Log creation
+            LogHistory(request.Id, "Created", null, "Draft");
+            await _context.SaveChangesAsync();
+
             return Ok(request);
         }
 
@@ -73,6 +102,7 @@ namespace RequestHub.Controllers
                 new ApprovalStep { RequestId = id, Order = 2, Status = "Pending" }
             );
 
+            LogHistory(id, "StatusChanged", "Draft", "Submitted");
             request.Status = "Submitted";
             await _requestRepo.UpdateAsync(request);
             await _context.SaveChangesAsync();
@@ -95,9 +125,10 @@ namespace RequestHub.Controllers
                 .OrderBy(s => s.Order)
                 .ToListAsync();
 
+            var oldStatus = request.Status;
+
             if (role.Equals("Approver", StringComparison.OrdinalIgnoreCase))
             {
-                // Step 1: Approver must approve first
                 if (request.Status != "Submitted")
                     return BadRequest("Request must be in Submitted status for Approver.");
 
@@ -113,7 +144,6 @@ namespace RequestHub.Controllers
             }
             else if (role.Equals("Admin", StringComparison.OrdinalIgnoreCase))
             {
-                // Step 2: Admin can only approve after Approver did step 1
                 var step1 = steps.FirstOrDefault(s => s.Order == 1);
                 if (step1?.Status != "Approved")
                     return BadRequest("Approver must approve first before Admin.");
@@ -132,6 +162,11 @@ namespace RequestHub.Controllers
                 request.Status = "Approved";
             }
 
+            // Log comment if provided
+            if (!string.IsNullOrEmpty(dto?.Comment))
+                LogHistory(id, "CommentAdded", null, null);
+
+            LogHistory(id, "StatusChanged", oldStatus, request.Status);
             await _context.SaveChangesAsync();
             return Ok(request);
         }
@@ -150,7 +185,6 @@ namespace RequestHub.Controllers
             if (request.Status != "Submitted" && request.Status != "InApproval")
                 return BadRequest($"Cannot reject: status is {request.Status}.");
 
-            // Mark the current pending step as rejected
             var steps = await _context.ApprovalSteps
                 .Where(s => s.RequestId == id)
                 .OrderBy(s => s.Order)
@@ -165,7 +199,13 @@ namespace RequestHub.Controllers
                 currentStep.Comment = dto?.Comment;
             }
 
+            var oldStatus = request.Status;
             request.Status = "Rejected";
+
+            if (!string.IsNullOrEmpty(dto?.Comment))
+                LogHistory(id, "CommentAdded", null, null);
+
+            LogHistory(id, "StatusChanged", oldStatus, "Rejected");
             await _context.SaveChangesAsync();
             return Ok(request);
         }
@@ -201,9 +241,9 @@ namespace RequestHub.Controllers
         {
             var userId = GetCurrentUserId();
             var requests = await _context.AccessRequests.Where(r => r.CreatedBy == userId).ToListAsync();
-            var csv = "Id,Title,Resource,AccessType,Status,CreatedAt\n" +
+            var csv = "Id,Title,Resource,AccessType,Priority,Department,Status,CreatedAt,ExpiryDate\n" +
                 string.Join("\n", requests.Select(r =>
-                    $"{r.Id},{r.Title},{r.Resource},{r.AccessType},{r.Status},{r.CreatedAt:yyyy-MM-dd HH:mm}"));
+                    $"{r.Id},{r.Title},{r.Resource},{r.AccessType},{r.Priority},{r.Department},{r.Status},{r.CreatedAt:yyyy-MM-dd HH:mm},{r.ExpiryDate:yyyy-MM-dd}"));
             return File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv", "requests.csv");
         }
     }

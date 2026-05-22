@@ -16,6 +16,11 @@
             </div>
 
             <div class="form-group">
+                <label for="department">Department</label>
+                <input type="text" id="department" placeholder="e.g. IT, HR, Accounting">
+            </div>
+
+            <div class="form-group">
                 <label for="resource">Resource</label>
                 <input type="text" id="resource" placeholder="e.g. /projects or Jira" required>
             </div>
@@ -31,8 +36,22 @@
             </div>
 
             <div class="form-group">
+                <label for="priority">Priority</label>
+                <select id="priority">
+                    <option value="Low">Low</option>
+                    <option value="Medium" selected>Medium</option>
+                    <option value="High">High</option>
+                </select>
+            </div>
+
+            <div class="form-group">
                 <label for="justification">Justification</label>
                 <textarea id="justification" rows="3" placeholder="Why do you need this access?"></textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="expiryDate">Expiry Date (optional)</label>
+                <input type="date" id="expiryDate">
             </div>
 
             <div class="form-group">

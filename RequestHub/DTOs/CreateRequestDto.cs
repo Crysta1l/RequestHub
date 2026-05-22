@@ -7,8 +7,9 @@
         public string Resource { get; set; } = string.Empty;
         public string AccessType { get; set; } = string.Empty;
         public string Justification { get; set; } = string.Empty;
-        public string Priority { get; set; } = "Medium";
+        public string Priority { get; set; } = "Medium"; // Low, Medium, High
+        public string? Department { get; set; }          // user's department
+        public DateTime? ExpiryDate { get; set; }        // access expiry date
         public string? Basis { get; set; }
-
     }
 }

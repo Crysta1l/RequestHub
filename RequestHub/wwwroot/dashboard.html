@@ -11,10 +11,22 @@
 
         <div class="top-bar">
             <button id="newRequestBtn">+ New Request</button>
+            <button id="reportBtn">⬇ Download Report</button>
             <button id="logoutBtn" class="btn-danger">Logout</button>
         </div>
 
         <h2>My Requests</h2>
+        <div class="filter-bar">
+            <input type="text" id="filterResource" placeholder="Filter by resource...">
+            <select id="filterStatus">
+                <option value="">All statuses</option>
+                <option value="Draft">Draft</option>
+                <option value="Submitted">Submitted</option>
+                <option value="InApproval">InApproval</option>
+                <option value="Approved">Approved</option>
+                <option value="Rejected">Rejected</option>
+            </select>
+        </div>
         <div id="myRequestsList"></div>
 
         <h2>Pending Approval</h2>
