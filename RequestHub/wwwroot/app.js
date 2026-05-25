@@ -130,6 +130,7 @@ if (window.location.pathname.includes('dashboard.html')) {
                         <div class="request-card-meta">Access: ${escapeHtml(r.accessType)}</div>
                         <div class="request-card-meta">Priority: ${escapeHtml(r.priority)}</div>
                         <div class="request-card-meta">Status: ${statusBadge(r.status)}</div>
+                        ${r.status === 'Approved' ? `<div class="request-card-meta">Acknowledged: ${r.isAcknowledged ? '✓ Yes' : '✗ No'}</div>` : ''}
                         <div class="request-card-actions">
                             ${r.status === 'Draft' ? `<button class="btn-sm submitBtn" data-id="${r.id}">Submit</button>` : ''}
                             <button class="btn-sm viewBtn" data-id="${r.id}">View Details</button>
@@ -333,7 +334,7 @@ if (window.location.pathname.includes('request.html')) {
                 `).join('');
             }
 
-            // Download file — fetch with token then trigger browser download
+            // Download file using fetch + token
             document.querySelectorAll('.downloadFileBtn').forEach(btn => {
                 btn.addEventListener('click', async () => {
                     const res = await fetch(`/api/File/download/${btn.dataset.id}`, {
@@ -384,6 +385,7 @@ if (window.location.pathname.includes('request.html')) {
                         <div class="request-card-meta">${new Date(h.performedAt).toLocaleString()}</div>
                         <div class="request-card-title">${escapeHtml(h.action)}</div>
                         ${h.oldStatus ? `<div class="request-card-meta">${escapeHtml(h.oldStatus)} → ${escapeHtml(h.newStatus)}</div>` : ''}
+                        ${h.ipAddress ? `<div class="request-card-meta">IP: ${escapeHtml(h.ipAddress)}</div>` : ''}
                     </div>
                 `).join('');
             }
@@ -439,12 +441,16 @@ if (window.location.pathname.includes('request.html')) {
                     <span class="detail-value">${statusBadge(req.status)}</span>
                 </div>
                 <div class="detail-row">
+                    <span class="detail-label">Acknowledged</span>
+                    <span class="detail-value">${req.isAcknowledged ? '✓ Yes — ' + new Date(req.acknowledgedAt).toLocaleString() : '✗ No'}</span>
+                </div>
+                <div class="detail-row">
                     <span class="detail-label">Created</span>
                     <span class="detail-value">${new Date(req.createdAt).toLocaleString()}</span>
                 </div>
             `;
 
-            // Show approve/reject only for correct role and correct status
+            // Show approve/reject for Approver and Admin
             const canApprove =
                 (role === 'Approver' && req.status === 'Submitted') ||
                 (role === 'Admin' && req.status === 'InApproval');
@@ -490,6 +496,34 @@ if (window.location.pathname.includes('request.html')) {
                         document.getElementById('approvalMessage').className = 'message message-error';
                     }
                 });
+
+            } else if (req.status === 'Approved' && !req.isAcknowledged && role === 'Requester') {
+                // Show acknowledge button for requester
+                approvalSection.innerHTML = `
+                    <hr>
+                    <p style="color: var(--text-secondary); margin-bottom: 1rem;">Please confirm that you have received access.</p>
+                    <button id="acknowledgeBtn">✓ I Acknowledge Access</button>
+                    <div class="message" id="approvalMessage"></div>
+                `;
+
+                document.getElementById('acknowledgeBtn').addEventListener('click', async () => {
+                    const resp = await fetch(`/api/AccessRequest/${requestId}/acknowledge`, {
+                        method: 'PATCH',
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (resp.ok) { loadRequest(); loadHistory(); }
+                    else {
+                        document.getElementById('approvalMessage').innerText = 'Acknowledge failed';
+                        document.getElementById('approvalMessage').className = 'message message-error';
+                    }
+                });
+
+            } else if (req.status === 'Approved' && req.isAcknowledged) {
+                // Already acknowledged
+                approvalSection.innerHTML = `
+                    <hr>
+                    <p style="color: #70d090;">✓ Access acknowledged on ${new Date(req.acknowledgedAt).toLocaleString()}</p>
+                `;
             } else {
                 approvalSection.innerHTML = '';
             }

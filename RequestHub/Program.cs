@@ -5,6 +5,8 @@ using RequestHub.Data;
 using RequestHub.Interfaces;
 using RequestHub.Models;
 using RequestHub.Repositories;
+using RequestHub.Services;
+using RequestHub.Services.Services;
 using Scalar.AspNetCore;
 using System.Text;
 
@@ -40,6 +42,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
+
+
+// Register email service
+builder.Services.AddScoped<EmailService>();
+
+// Register background service for expiry notifications
+builder.Services.AddHostedService<ExpiryNotificationService>();
+
 
 var app = builder.Build();
 

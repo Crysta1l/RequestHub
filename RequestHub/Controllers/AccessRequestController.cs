@@ -6,6 +6,7 @@ using RequestHub.Data;
 using RequestHub.DTOs;
 using RequestHub.Interfaces;
 using RequestHub.Models;
+using RequestHub.Services.Services;
 using System.Security.Claims;
 
 namespace RequestHub.Controllers
@@ -18,18 +19,28 @@ namespace RequestHub.Controllers
         private readonly IAccessRequestRepository _requestRepo;
         private readonly AppDbContext _context;
         private readonly IMapper _mapper;
+        private readonly EmailService _emailService;
 
-        public AccessRequestController(IAccessRequestRepository requestRepo, AppDbContext context, IMapper mapper)
+        public AccessRequestController(IAccessRequestRepository requestRepo, AppDbContext context, IMapper mapper, EmailService emailService)
         {
             _requestRepo = requestRepo;
             _context = context;
             _mapper = mapper;
+            _emailService = emailService;
         }
 
         private int GetCurrentUserId() => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         private string GetCurrentUserRole() => User.FindFirstValue(ClaimTypes.Role) ?? "";
 
-        // Helper to log history
+        // Get IP address from request
+        private string GetIpAddress() =>
+            HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+        // Get User-Agent from request headers
+        private string GetUserAgent() =>
+            HttpContext.Request.Headers["User-Agent"].ToString() ?? "unknown";
+
+        // Helper to log history with IP and User-Agent
         private void LogHistory(int requestId, string action, string? oldStatus, string? newStatus)
         {
             _context.RequestHistories.Add(new RequestHistory
@@ -39,7 +50,9 @@ namespace RequestHub.Controllers
                 OldStatus = oldStatus,
                 NewStatus = newStatus,
                 PerformedById = GetCurrentUserId(),
-                PerformedAt = DateTime.UtcNow
+                PerformedAt = DateTime.UtcNow,
+                IpAddress = GetIpAddress(),
+                UserAgent = GetUserAgent()
             });
         }
 
@@ -80,7 +93,6 @@ namespace RequestHub.Controllers
             request.CreatedAt = DateTime.UtcNow;
             await _requestRepo.AddAsync(request);
 
-            // Log creation
             LogHistory(request.Id, "Created", null, "Draft");
             await _context.SaveChangesAsync();
 
@@ -162,12 +174,26 @@ namespace RequestHub.Controllers
                 request.Status = "Approved";
             }
 
-            // Log comment if provided
             if (!string.IsNullOrEmpty(dto?.Comment))
                 LogHistory(id, "CommentAdded", null, null);
 
             LogHistory(id, "StatusChanged", oldStatus, request.Status);
             await _context.SaveChangesAsync();
+
+            // Send email notification to requester
+            try
+            {
+                var requester = await _context.Users.FindAsync(request.CreatedBy);
+                if (requester != null)
+                    await _emailService.SendStatusChangedAsync(requester.Email, request.Title, oldStatus, request.Status);
+            }
+            catch (Exception ex)
+            {
+                // Don't fail the request if email fails
+                Console.WriteLine($"Email failed: {ex.Message}");
+            }
+
+
             return Ok(request);
         }
 
@@ -207,6 +233,43 @@ namespace RequestHub.Controllers
 
             LogHistory(id, "StatusChanged", oldStatus, "Rejected");
             await _context.SaveChangesAsync();
+
+            // Send email notification to requester
+            try
+            {
+                var requester = await _context.Users.FindAsync(request.CreatedBy);
+                if (requester != null)
+                    await _emailService.SendStatusChangedAsync(requester.Email, request.Title, oldStatus, "Rejected");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Email failed: {ex.Message}");
+            }
+
+
+            return Ok(request);
+        }
+
+        // Endpoint for user to acknowledge access after approval
+        [HttpPatch("{id}/acknowledge")]
+        public async Task<IActionResult> Acknowledge(int id)
+        {
+            var userId = GetCurrentUserId();
+            var request = await _requestRepo.GetByIdAsync(id);
+            if (request == null) return NotFound();
+            if (request.CreatedBy != userId) return Forbid();
+            if (request.Status != "Approved")
+                return BadRequest("Can only acknowledge approved requests.");
+            if (request.IsAcknowledged)
+                return BadRequest("Request already acknowledged.");
+
+            request.IsAcknowledged = true;
+            request.AcknowledgedAt = DateTime.UtcNow;
+            request.AcknowledgedBy = userId;
+
+            LogHistory(id, "Acknowledged", null, null);
+            await _requestRepo.UpdateAsync(request);
+            await _context.SaveChangesAsync();
             return Ok(request);
         }
 
@@ -241,9 +304,9 @@ namespace RequestHub.Controllers
         {
             var userId = GetCurrentUserId();
             var requests = await _context.AccessRequests.Where(r => r.CreatedBy == userId).ToListAsync();
-            var csv = "Id,Title,Resource,AccessType,Priority,Department,Status,CreatedAt,ExpiryDate\n" +
+            var csv = "Id,Title,Resource,AccessType,Priority,Department,Status,CreatedAt,ExpiryDate,IsAcknowledged\n" +
                 string.Join("\n", requests.Select(r =>
-                    $"{r.Id},{r.Title},{r.Resource},{r.AccessType},{r.Priority},{r.Department},{r.Status},{r.CreatedAt:yyyy-MM-dd HH:mm},{r.ExpiryDate:yyyy-MM-dd}"));
+                    $"{r.Id},{r.Title},{r.Resource},{r.AccessType},{r.Priority},{r.Department},{r.Status},{r.CreatedAt:yyyy-MM-dd HH:mm},{r.ExpiryDate:yyyy-MM-dd},{r.IsAcknowledged}"));
             return File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv", "requests.csv");
         }
     }
