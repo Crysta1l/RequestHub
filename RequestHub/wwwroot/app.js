@@ -4,18 +4,15 @@
 
 const token = localStorage.getItem('token');
 
-// Redirect to login if not authenticated
 if (!token && !window.location.pathname.includes('login.html') && !window.location.pathname.includes('index.html')) {
     window.location.href = 'login.html';
 }
 
-// Escape HTML to prevent XSS
 function escapeHtml(str) {
     if (!str) return '';
     return str.replace(/[&<>]/g, m => (m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;'));
 }
 
-// Decode JWT and get user role
 function getUserRole() {
     if (!token) return '';
     try {
@@ -26,7 +23,6 @@ function getUserRole() {
     }
 }
 
-// Return a badge HTML string based on status
 function statusBadge(status) {
     const map = {
         'Draft': 'badge-draft',
@@ -37,6 +33,16 @@ function statusBadge(status) {
     };
     const cls = map[status] || 'badge-draft';
     return `<span class="badge ${cls}">${escapeHtml(status)}</span>`;
+}
+
+function priorityBadge(priority) {
+    const map = {
+        'Low': 'priority-low',
+        'Medium': 'priority-medium',
+        'High': 'priority-high',
+    };
+    const cls = map[priority] || 'priority-medium';
+    return `<span class="${cls}">${escapeHtml(priority)}</span>`;
 }
 
 // =====================
@@ -53,7 +59,6 @@ if (window.location.pathname.includes('login.html') || window.location.pathname.
         };
     }
 
-    // Login button
     document.getElementById('loginBtn').addEventListener('click', async () => {
         const { email, password } = getCredentials();
         try {
@@ -76,7 +81,6 @@ if (window.location.pathname.includes('login.html') || window.location.pathname.
         }
     });
 
-    // Register button — same fields, different endpoint
     document.getElementById('registerBtn').addEventListener('click', async () => {
         const { email, password } = getCredentials();
         try {
@@ -106,19 +110,40 @@ if (window.location.pathname.includes('dashboard.html')) {
 
     const myRequestsDiv = document.getElementById('myRequestsList');
     const pendingDiv = document.getElementById('pendingList');
+    const statsBar = document.getElementById('statsBar');
     const role = getUserRole();
+
+    async function loadStats(requests) {
+        const total = requests.length;
+        const draft = requests.filter(r => r.status === 'Draft').length;
+        const pending = requests.filter(r => r.status === 'Submitted' || r.status === 'InApproval').length;
+        const approved = requests.filter(r => r.status === 'Approved').length;
+        const rejected = requests.filter(r => r.status === 'Rejected').length;
+
+        statsBar.innerHTML = `
+            <div class="stat-card"><span>${total}</span>Total</div>
+            <div class="stat-card"><span>${draft}</span>Draft</div>
+            <div class="stat-card"><span>${pending}</span>Pending</div>
+            <div class="stat-card"><span>${approved}</span>Approved</div>
+            <div class="stat-card"><span>${rejected}</span>Rejected</div>
+        `;
+    }
 
     async function loadDashboard() {
         try {
-            // Build query params for filtering
             const status = document.getElementById('filterStatus').value;
             const resource = document.getElementById('filterResource').value;
+            const title = document.getElementById('filterTitle').value;
+
             let url = '/api/AccessRequest?';
             if (status) url += `status=${encodeURIComponent(status)}&`;
-            if (resource) url += `resource=${encodeURIComponent(resource)}`;
+            if (resource) url += `resource=${encodeURIComponent(resource)}&`;
+            if (title) url += `title=${encodeURIComponent(title)}`;
 
             const myRes = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
             const myRequests = await myRes.json();
+
+            loadStats(myRequests);
 
             if (myRequests.length === 0) {
                 myRequestsDiv.innerHTML = '<div class="empty-state">No requests found.</div>';
@@ -128,7 +153,7 @@ if (window.location.pathname.includes('dashboard.html')) {
                         <div class="request-card-title">${escapeHtml(r.title)}</div>
                         <div class="request-card-meta">Resource: ${escapeHtml(r.resource)}</div>
                         <div class="request-card-meta">Access: ${escapeHtml(r.accessType)}</div>
-                        <div class="request-card-meta">Priority: ${escapeHtml(r.priority)}</div>
+                        <div class="request-card-meta">Priority: ${priorityBadge(r.priority)}</div>
                         <div class="request-card-meta">Status: ${statusBadge(r.status)}</div>
                         ${r.status === 'Approved' ? `<div class="request-card-meta">Acknowledged: ${r.isAcknowledged ? '✓ Yes' : '✗ No'}</div>` : ''}
                         <div class="request-card-actions">
@@ -139,7 +164,6 @@ if (window.location.pathname.includes('dashboard.html')) {
                 `).join('');
             }
 
-            // Submit buttons
             document.querySelectorAll('.submitBtn').forEach(btn => {
                 btn.addEventListener('click', async () => {
                     const res = await fetch(`/api/AccessRequest/${btn.dataset.id}/submit`, {
@@ -150,14 +174,12 @@ if (window.location.pathname.includes('dashboard.html')) {
                 });
             });
 
-            // View buttons
             document.querySelectorAll('.viewBtn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     window.location.href = `request.html?id=${btn.dataset.id}`;
                 });
             });
 
-            // Load pending approvals (only for Approver and Admin)
             if (role === 'Approver' || role === 'Admin') {
                 const pendingRes = await fetch('/api/AccessRequest/pending', {
                     headers: { 'Authorization': `Bearer ${token}` }
@@ -171,7 +193,7 @@ if (window.location.pathname.includes('dashboard.html')) {
                         <div class="request-card">
                             <div class="request-card-title">${escapeHtml(r.title)}</div>
                             <div class="request-card-meta">Resource: ${escapeHtml(r.resource)}</div>
-                            <div class="request-card-meta">Priority: ${escapeHtml(r.priority)}</div>
+                            <div class="request-card-meta">Priority: ${priorityBadge(r.priority)}</div>
                             <div class="request-card-meta">Status: ${statusBadge(r.status)}</div>
                             <div class="request-card-actions">
                                 <button class="btn-sm approvePendingBtn" data-id="${r.id}">Approve</button>
@@ -225,7 +247,6 @@ if (window.location.pathname.includes('dashboard.html')) {
         window.location.href = 'create.html';
     });
 
-    // Download report as CSV
     document.getElementById('reportBtn')?.addEventListener('click', async () => {
         const res = await fetch('/api/AccessRequest/report', {
             headers: { 'Authorization': `Bearer ${token}` }
@@ -246,9 +267,9 @@ if (window.location.pathname.includes('dashboard.html')) {
         window.location.href = 'login.html';
     });
 
-    // Filter listeners
     document.getElementById('filterStatus')?.addEventListener('change', loadDashboard);
     document.getElementById('filterResource')?.addEventListener('input', loadDashboard);
+    document.getElementById('filterTitle')?.addEventListener('input', loadDashboard);
 
     loadDashboard();
 }
@@ -309,7 +330,6 @@ if (window.location.pathname.includes('request.html')) {
     const historyList = document.getElementById('historyList');
     const role = getUserRole();
 
-    // Load files attached to this request
     async function loadFiles() {
         try {
             const res = await fetch(`/api/File/${requestId}/files`, {
@@ -334,7 +354,6 @@ if (window.location.pathname.includes('request.html')) {
                 `).join('');
             }
 
-            // Download file using fetch + token
             document.querySelectorAll('.downloadFileBtn').forEach(btn => {
                 btn.addEventListener('click', async () => {
                     const res = await fetch(`/api/File/download/${btn.dataset.id}`, {
@@ -352,7 +371,6 @@ if (window.location.pathname.includes('request.html')) {
                 });
             });
 
-            // Delete file
             document.querySelectorAll('.deleteFileBtn').forEach(btn => {
                 btn.addEventListener('click', async () => {
                     const res = await fetch(`/api/File/${btn.dataset.id}`, {
@@ -368,7 +386,6 @@ if (window.location.pathname.includes('request.html')) {
         }
     }
 
-    // Load history of this request
     async function loadHistory() {
         try {
             const res = await fetch(`/api/AccessRequest/${requestId}/history`, {
@@ -394,7 +411,6 @@ if (window.location.pathname.includes('request.html')) {
         }
     }
 
-    // Load request details
     async function loadRequest() {
         try {
             const res = await fetch(`/api/AccessRequest/${requestId}`, {
@@ -418,7 +434,7 @@ if (window.location.pathname.includes('request.html')) {
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Priority</span>
-                    <span class="detail-value">${escapeHtml(req.priority)}</span>
+                    <span class="detail-value">${priorityBadge(req.priority)}</span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Department</span>
@@ -450,7 +466,6 @@ if (window.location.pathname.includes('request.html')) {
                 </div>
             `;
 
-            // Show approve/reject for Approver and Admin
             const canApprove =
                 (role === 'Approver' && req.status === 'Submitted') ||
                 (role === 'Admin' && req.status === 'InApproval');
@@ -498,7 +513,6 @@ if (window.location.pathname.includes('request.html')) {
                 });
 
             } else if (req.status === 'Approved' && !req.isAcknowledged && role === 'Requester') {
-                // Show acknowledge button for requester
                 approvalSection.innerHTML = `
                     <hr>
                     <p style="color: var(--text-secondary); margin-bottom: 1rem;">Please confirm that you have received access.</p>
@@ -512,14 +526,9 @@ if (window.location.pathname.includes('request.html')) {
                         headers: { 'Authorization': `Bearer ${token}` }
                     });
                     if (resp.ok) { loadRequest(); loadHistory(); }
-                    else {
-                        document.getElementById('approvalMessage').innerText = 'Acknowledge failed';
-                        document.getElementById('approvalMessage').className = 'message message-error';
-                    }
                 });
 
             } else if (req.status === 'Approved' && req.isAcknowledged) {
-                // Already acknowledged
                 approvalSection.innerHTML = `
                     <hr>
                     <p style="color: #70d090;">✓ Access acknowledged on ${new Date(req.acknowledgedAt).toLocaleString()}</p>
@@ -536,7 +545,6 @@ if (window.location.pathname.includes('request.html')) {
         }
     }
 
-    // Upload file button
     document.getElementById('uploadBtn')?.addEventListener('click', async () => {
         const fileInput = document.getElementById('fileInput');
         if (!fileInput.files[0]) return;

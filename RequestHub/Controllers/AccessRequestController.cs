@@ -57,12 +57,13 @@ namespace RequestHub.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetMyRequests([FromQuery] string? status = null, [FromQuery] string? resource = null)
+        public async Task<IActionResult> GetMyRequests([FromQuery] string? status = null, [FromQuery] string? resource = null, [FromQuery] string? title = null)
         {
             var userId = GetCurrentUserId();
             var query = _context.AccessRequests.Where(r => r.CreatedBy == userId);
             if (!string.IsNullOrEmpty(status)) query = query.Where(r => r.Status == status);
             if (!string.IsNullOrEmpty(resource)) query = query.Where(r => r.Resource.Contains(resource));
+            if (!string.IsNullOrEmpty(title)) query = query.Where(r => r.Title.Contains(title)); // search by title
             return Ok(await query.OrderByDescending(r => r.CreatedAt).ToListAsync());
         }
 
