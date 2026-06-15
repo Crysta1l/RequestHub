@@ -181,6 +181,18 @@ namespace RequestHub.Controllers
             LogHistory(id, "StatusChanged", oldStatus, request.Status);
             await _context.SaveChangesAsync();
 
+            // Send notification to requester
+            await _context.Notifications.AddAsync(new Notification
+            {
+                UserId = request.CreatedBy,
+                Message = request.Status == "Approved"
+                    ? $"Your request \"{request.Title}\" has been fully approved!"
+                    : $"Your request \"{request.Title}\" has been approved by Approver. Waiting for Admin.",
+                RequestId = request.Id,
+                CreatedAt = DateTime.UtcNow
+            });
+            await _context.SaveChangesAsync();
+
             // Send email notification to requester
             try
             {
@@ -233,6 +245,16 @@ namespace RequestHub.Controllers
                 LogHistory(id, "CommentAdded", null, null);
 
             LogHistory(id, "StatusChanged", oldStatus, "Rejected");
+            await _context.SaveChangesAsync();
+
+            // Send notification to requester
+            await _context.Notifications.AddAsync(new Notification
+            {
+                UserId = request.CreatedBy,
+                Message = $"Your request \"{request.Title}\" has been rejected.",
+                RequestId = request.Id,
+                CreatedAt = DateTime.UtcNow
+            });
             await _context.SaveChangesAsync();
 
             // Send email notification to requester
