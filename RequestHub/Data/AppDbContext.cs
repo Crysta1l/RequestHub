@@ -13,6 +13,8 @@ namespace RequestHub.Data
         public DbSet<AccessRequest> AccessRequests { get; set; }
         public DbSet<RequestFile> RequestFiles { get; set; }
 
+        public DbSet<AuditLog> AuditLogs { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             // ApprovalStep → AccessRequest
