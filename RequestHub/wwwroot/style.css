@@ -447,3 +447,71 @@ hr {
     border-radius: 999px;
     font-size: 0.75rem;
 }
+
+
+/* Notification bell */
+.notification-bell {
+    position: relative;
+    cursor: pointer;
+    padding: 0.5rem;
+    display: inline-block;
+}
+
+.notif-badge {
+    position: absolute;
+    top: 0;
+    right: 0;
+    background: var(--accent-red);
+    color: white;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 1px 5px;
+    min-width: 16px;
+    text-align: center;
+}
+
+.notif-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    width: 320px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-accent);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-glow);
+    z-index: 999;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.notif-item {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+    .notif-item:hover {
+        background: rgba(140, 40, 180, 0.1);
+    }
+
+    .notif-item.unread {
+        color: var(--text-primary);
+        border-left: 3px solid var(--accent-pink);
+    }
+
+.notif-read-all {
+    padding: 0.5rem 1rem;
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-top: 1px solid var(--border-subtle);
+}
+
+    .notif-read-all:hover {
+        color: var(--accent-pink);
+    }

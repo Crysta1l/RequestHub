@@ -113,7 +113,105 @@ if (window.location.pathname.includes('dashboard.html')) {
     const statsBar = document.getElementById('statsBar');
     const role = getUserRole();
 
-    async function loadStats(requests) {
+    // Show admin button if Admin
+    if (role === 'Admin') {
+        document.getElementById('adminBtn').style.display = 'inline-block';
+    }
+
+    // Load notification count
+    async function loadNotificationCount() {
+        try {
+            const res = await fetch('/api/Notification/unread-count', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            const badge = document.getElementById('notifCount');
+            if (data.count > 0) {
+                badge.innerText = data.count;
+                badge.style.display = 'inline-block';
+            } else {
+                badge.style.display = 'none';
+            }
+        } catch (err) {
+            console.error('Notification count error:', err);
+        }
+    }
+
+    // Load notifications dropdown
+    async function loadNotifications() {
+        try {
+            const res = await fetch('/api/Notification', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!res.ok) return;
+            const notifications = await res.json();
+            const dropdown = document.getElementById('notifDropdown');
+
+            if (notifications.length === 0) {
+                dropdown.innerHTML = '<div class="notif-item">No notifications</div>';
+            } else {
+                dropdown.innerHTML = `
+                    ${notifications.map(n => `
+                        <div class="notif-item ${!n.isRead ? 'unread' : ''}" data-id="${n.id}" data-request="${n.requestId || ''}">
+                            ${escapeHtml(n.message)}
+                            <div style="font-size:0.75rem; color: var(--text-muted); margin-top:4px;">
+                                ${new Date(n.createdAt).toLocaleString()}
+                            </div>
+                        </div>
+                    `).join('')}
+                    <div class="notif-read-all" id="readAllBtn">Mark all as read</div>
+                `;
+
+                // Click on notification
+                document.querySelectorAll('.notif-item[data-id]').forEach(item => {
+                    item.addEventListener('click', async () => {
+                        await fetch(`/api/Notification/${item.dataset.id}/read`, {
+                            method: 'PATCH',
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        if (item.dataset.request) {
+                            window.location.href = `request.html?id=${item.dataset.request}`;
+                        }
+                        loadNotificationCount();
+                    });
+                });
+
+                // Mark all as read
+                document.getElementById('readAllBtn')?.addEventListener('click', async () => {
+                    await fetch('/api/Notification/read-all', {
+                        method: 'PATCH',
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    dropdown.style.display = 'none';
+                    loadNotificationCount();
+                });
+            }
+        } catch (err) {
+            console.error('Notifications error:', err);
+        }
+    }
+
+    // Toggle notification dropdown
+    document.getElementById('notificationBell')?.addEventListener('click', async () => {
+        const dropdown = document.getElementById('notifDropdown');
+        if (dropdown.style.display === 'none') {
+            await loadNotifications();
+            dropdown.style.display = 'block';
+        } else {
+            dropdown.style.display = 'none';
+        }
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        const bell = document.getElementById('notificationBell');
+        if (!bell.contains(e.target)) {
+            document.getElementById('notifDropdown').style.display = 'none';
+        }
+    });
+
+    function loadStats(requests) {
         const total = requests.length;
         const draft = requests.filter(r => r.status === 'Draft').length;
         const pending = requests.filter(r => r.status === 'Submitted' || r.status === 'InApproval').length;
@@ -247,6 +345,10 @@ if (window.location.pathname.includes('dashboard.html')) {
         window.location.href = 'create.html';
     });
 
+    document.getElementById('adminBtn')?.addEventListener('click', () => {
+        window.location.href = 'admin.html';
+    });
+
     document.getElementById('reportBtn')?.addEventListener('click', async () => {
         const res = await fetch('/api/AccessRequest/report', {
             headers: { 'Authorization': `Bearer ${token}` }
@@ -262,7 +364,11 @@ if (window.location.pathname.includes('dashboard.html')) {
         }
     });
 
-    document.getElementById('logoutBtn')?.addEventListener('click', () => {
+    document.getElementById('logoutBtn')?.addEventListener('click', async () => {
+        await fetch('/api/Auth/logout', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
         localStorage.removeItem('token');
         window.location.href = 'login.html';
     });
@@ -272,6 +378,126 @@ if (window.location.pathname.includes('dashboard.html')) {
     document.getElementById('filterTitle')?.addEventListener('input', loadDashboard);
 
     loadDashboard();
+    loadNotificationCount();
+}
+
+// =====================
+// ADMIN PAGE
+// =====================
+if (window.location.pathname.includes('admin.html')) {
+
+    const role = getUserRole();
+    if (role !== 'Admin') {
+        window.location.href = 'dashboard.html';
+    }
+
+    async function loadUsers() {
+        try {
+            const email = document.getElementById('filterEmail').value;
+            let url = '/api/Admin/users';
+            if (email) url += `?email=${encodeURIComponent(email)}`;
+
+            const res = await fetch(url, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const users = await res.json();
+
+            document.getElementById('usersList').innerHTML = users.map(u => `
+                <div class="request-card">
+                    <div class="request-card-title">${escapeHtml(u.email)}</div>
+                    <div class="request-card-meta">Role: ${escapeHtml(u.role)}</div>
+                    <div class="request-card-meta">Status: ${u.isActive ? 'Active' : 'Deactivated'}</div>
+                    <div class="request-card-actions">
+                        <select class="roleSelect" data-id="${u.id}">
+                            <option value="Requester" ${u.role === 'Requester' ? 'selected' : ''}>Requester</option>
+                            <option value="Approver" ${u.role === 'Approver' ? 'selected' : ''}>Approver</option>
+                            <option value="Admin" ${u.role === 'Admin' ? 'selected' : ''}>Admin</option>
+                        </select>
+                        <button class="btn-sm changeRoleBtn" data-id="${u.id}">Change Role</button>
+                        ${u.isActive
+                    ? `<button class="btn-sm btn-danger deactivateBtn" data-id="${u.id}">Deactivate</button>`
+                    : `<button class="btn-sm activateBtn" data-id="${u.id}">Activate</button>`
+                }
+                    </div>
+                </div>
+            `).join('');
+
+            // Change role
+            document.querySelectorAll('.changeRoleBtn').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const select = document.querySelector(`.roleSelect[data-id="${btn.dataset.id}"]`);
+                    const res = await fetch(`/api/Admin/users/${btn.dataset.id}/role`, {
+                        method: 'PATCH',
+                        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify(select.value)
+                    });
+                    if (res.ok) loadUsers();
+                });
+            });
+
+            // Deactivate
+            document.querySelectorAll('.deactivateBtn').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    if (!confirm('Deactivate this user?')) return;
+                    const res = await fetch(`/api/Admin/users/${btn.dataset.id}/deactivate`, {
+                        method: 'PATCH',
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (res.ok) loadUsers();
+                });
+            });
+
+            // Activate
+            document.querySelectorAll('.activateBtn').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const res = await fetch(`/api/Admin/users/${btn.dataset.id}/activate`, {
+                        method: 'PATCH',
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (res.ok) loadUsers();
+                });
+            });
+
+        } catch (err) {
+            console.error('Users load error:', err);
+        }
+    }
+
+    async function loadAuditLog() {
+        try {
+            const email = document.getElementById('filterAuditEmail').value;
+            const action = document.getElementById('filterAction').value;
+            let url = '/api/Audit?';
+            if (email) url += `email=${encodeURIComponent(email)}&`;
+            if (action) url += `action=${encodeURIComponent(action)}`;
+
+            const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+            const logs = await res.json();
+
+            document.getElementById('auditList').innerHTML = logs.length === 0
+                ? '<div class="empty-state">No audit records.</div>'
+                : logs.map(l => `
+                    <div class="request-card">
+                        <div class="request-card-title">${escapeHtml(l.userEmail)} — ${escapeHtml(l.action)}</div>
+                        <div class="request-card-meta">${new Date(l.performedAt).toLocaleString()}</div>
+                        <div class="request-card-meta">IP: ${escapeHtml(l.ipAddress || '—')}</div>
+                        <div class="request-card-meta">Success: ${l.isSuccess ? 'Yes' : 'No'}</div>
+                    </div>
+                `).join('');
+        } catch (err) {
+            console.error('Audit load error:', err);
+        }
+    }
+
+    document.getElementById('filterEmail')?.addEventListener('input', loadUsers);
+    document.getElementById('filterAuditEmail')?.addEventListener('input', loadAuditLog);
+    document.getElementById('filterAction')?.addEventListener('change', loadAuditLog);
+    document.getElementById('backBtn')?.addEventListener('click', () => {
+        window.location.href = 'dashboard.html';
+    });
+
+    loadUsers();
+    loadAuditLog();
 }
 
 // =====================
@@ -295,10 +521,7 @@ if (window.location.pathname.includes('create.html')) {
         try {
             const res = await fetch('/api/AccessRequest', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify(payload)
             });
             if (res.ok) {
@@ -535,6 +758,25 @@ if (window.location.pathname.includes('request.html')) {
                 `;
             } else {
                 approvalSection.innerHTML = '';
+            }
+
+            // PDF export button
+            const pdfBtn = document.getElementById('pdfBtn');
+            if (pdfBtn) {
+                pdfBtn.addEventListener('click', async () => {
+                    const res = await fetch(`/api/Pdf/request/${requestId}`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (res.ok) {
+                        const blob = await res.blob();
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `request-${requestId}.pdf`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                    }
+                });
             }
 
             loadHistory();
